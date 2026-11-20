@@ -495,6 +495,20 @@ export class GameEngine {
           this.onTutorialStepChange?.(this.tutorialStep, this.tutorialCount);
           setTimeout(() => this.advanceTutorialStep('outro'), 1000);
         }
+        continue;
+      }
+
+      // Barrier duration finished but was not dodged (hit or didn't duck)
+      if (result.isFinished) {
+        this.laserBarriers.splice(i, 1);
+        if (this.isTutorialMode && this.tutorialStep === 'dodge') {
+          this.particles.addFloatingText('TRY AGAIN - SQUAT OR LEAN!', canvasWidth * 0.5, canvasHeight * 0.35, '#ffaa00');
+          setTimeout(() => {
+            if (this.state === 'tutorial' && this.tutorialStep === 'dodge') {
+              this.spawnTutorialTarget();
+            }
+          }, 1200);
+        }
       }
     }
   }

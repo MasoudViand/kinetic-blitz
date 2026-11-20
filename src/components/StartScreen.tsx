@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GameMode, PostureType, DifficultyLevel } from '../types/game';
+import { GameMode, PostureType, DifficultyLevel, CameraMode } from '../types/game';
 import {
   Play,
   ShieldCheck,
@@ -11,6 +11,10 @@ import {
   Activity,
   GraduationCap,
   Gauge,
+  Camera,
+  Video,
+  Sparkles,
+  EyeOff,
 } from 'lucide-react';
 import { HistoryModal } from './HistoryModal';
 
@@ -19,6 +23,8 @@ interface StartScreenProps {
   onStartTutorial: () => void;
   onEnableMock: () => void;
   isMockActive: boolean;
+  cameraMode: CameraMode;
+  onSelectCameraMode: (mode: CameraMode) => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({
@@ -26,6 +32,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onStartTutorial,
   onEnableMock,
   isMockActive,
+  cameraMode,
+  onSelectCameraMode,
 }) => {
   const [selectedMode, setSelectedMode] = useState<GameMode>('quick');
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>('medium');
@@ -77,6 +85,27 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       badge: 'Intense / Cardio',
       desc: 'Fast approaching orbs, frequent dodges & holds',
       color: 'border-rose-500/50 bg-rose-500/10 text-rose-400',
+    },
+  ];
+
+  const cameraModes: { id: CameraMode; label: string; desc: string; icon: React.ReactNode }[] = [
+    {
+      id: 'dimmed',
+      label: 'Mirror',
+      desc: 'Live webcam with cyber HUD',
+      icon: <Video className="w-3.5 h-3.5 text-pulse-cyan" />,
+    },
+    {
+      id: 'silhouette',
+      label: 'Silhouette',
+      desc: 'Neon wireframe on cyber grid',
+      icon: <Sparkles className="w-3.5 h-3.5 text-pulse-magenta" />,
+    },
+    {
+      id: 'hidden',
+      label: 'Cyber Grid',
+      desc: 'Pure HUD, camera video hidden',
+      icon: <EyeOff className="w-3.5 h-3.5 text-pulse-gold" />,
     },
   ];
 
@@ -155,6 +184,40 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                       <span className="text-xs font-arcade font-bold">{d.label}</span>
                     </div>
                     <span className="text-[10px] opacity-80 mt-1 line-clamp-1">{d.badge}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Camera View Mode Settings */}
+          <div className="w-full p-3 rounded-xl border border-slate-800 bg-slate-900/60 mb-3 text-left">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-pulse-cyan" />
+                <span className="text-xs font-bold text-gray-200">Camera & Visuals</span>
+              </div>
+              <span className="text-[11px] text-gray-400">Display & privacy mode</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {cameraModes.map((cm) => {
+                const isSelected = cameraMode === cm.id;
+                return (
+                  <button
+                    key={cm.id}
+                    onClick={() => onSelectCameraMode(cm.id)}
+                    className={`p-2 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-pulse-cyan bg-pulse-cyan/15 text-pulse-cyan shadow-sm font-bold'
+                        : 'border-slate-800 bg-black/40 text-gray-400 hover:text-white hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {cm.icon}
+                      <span className="text-xs font-arcade font-bold">{cm.label}</span>
+                    </div>
+                    <span className="text-[10px] text-gray-400 leading-tight">{cm.desc}</span>
                   </button>
                 );
               })}

@@ -349,34 +349,66 @@ export class CanvasRenderer {
       ctx.save();
       ctx.translate(x, y);
 
-      // Pulsing outer ring
-      const baseRadius = 24 + Math.min(16, vel * 8);
+      // 2X Sized outer targeting ring (48px up to 80px with fast strike velocity)
+      const baseRadius = 48 + Math.min(32, vel * 16);
       ctx.strokeStyle = isFast ? '#ffffff' : color;
-      ctx.lineWidth = isFast ? 3.5 : 2.5;
+      ctx.lineWidth = isFast ? 5.5 : 4.0;
       ctx.shadowColor = isFast ? '#ffffff' : color;
-      ctx.shadowBlur = isFast ? 18 : 10;
+      ctx.shadowBlur = isFast ? 28 : 16;
 
       ctx.beginPath();
       ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Glowing center pip
+      // Inner tactical dashed ring
+      ctx.save();
+      ctx.strokeStyle = isFast ? 'rgba(255, 255, 255, 0.7)' : `${color}88`;
+      ctx.lineWidth = 2.0;
+      ctx.setLineDash([6, 8]);
+      ctx.beginPath();
+      ctx.arc(0, 0, baseRadius * 0.55, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // 2X Glowing center core pip (diameter 22px)
       ctx.fillStyle = isFast ? '#ffffff' : color;
       ctx.beginPath();
-      ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      ctx.arc(0, 0, 11, 0, Math.PI * 2);
       ctx.fill();
 
-      // Crosshair tick marks
+      // Center bright core
+      ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.moveTo(-baseRadius - 5, 0);
-      ctx.lineTo(-baseRadius + 5, 0);
-      ctx.moveTo(baseRadius - 5, 0);
-      ctx.lineTo(baseRadius + 5, 0);
-      ctx.moveTo(0, -baseRadius - 5);
-      ctx.lineTo(0, -baseRadius + 5);
-      ctx.moveTo(0, baseRadius - 5);
-      ctx.lineTo(0, baseRadius + 5);
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2X Crosshair tick marks (compass axes)
+      ctx.strokeStyle = isFast ? '#ffffff' : color;
+      ctx.lineWidth = isFast ? 4.0 : 3.0;
+      const tickStart = baseRadius - 8;
+      const tickEnd = baseRadius + 12;
+
+      ctx.beginPath();
+      // Left tick
+      ctx.moveTo(-tickEnd, 0);
+      ctx.lineTo(-tickStart, 0);
+      // Right tick
+      ctx.moveTo(tickStart, 0);
+      ctx.lineTo(tickEnd, 0);
+      // Top tick
+      ctx.moveTo(0, -tickEnd);
+      ctx.lineTo(0, -tickStart);
+      // Bottom tick
+      ctx.moveTo(0, tickStart);
+      ctx.lineTo(0, tickEnd);
       ctx.stroke();
+
+      // Sleek hand tag (L / R)
+      ctx.font = 'bold 11px Orbitron, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isFast ? '#ffffff' : color;
+      ctx.fillText(hand === 'left' ? 'L' : 'R', 0, -baseRadius - 16);
 
       ctx.restore();
     };

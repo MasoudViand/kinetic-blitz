@@ -23,7 +23,10 @@ export const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>('idle');
   const [gameMode, setGameMode] = useState<GameMode>('quick');
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('medium');
-  const [cameraMode, setCameraMode] = useState<CameraMode>('dimmed');
+  const [cameraMode, setCameraMode] = useState<CameraMode>(() => {
+    const saved = localStorage.getItem('kinetic_pulse_camera_mode');
+    return (saved === 'dimmed' || saved === 'silhouette' || saved === 'hidden') ? saved : 'dimmed';
+  });
   const [isMuted, setIsMuted] = useState<boolean>(soundEngine.getMuted());
   const [detectedPosture, setDetectedPosture] = useState<PostureType>('uncalibrated');
   const [timeRemaining, setTimeRemaining] = useState<number>(60);
@@ -200,11 +203,16 @@ export const App: React.FC = () => {
     setIsMuted(muted);
   };
 
+  const handleSelectCameraMode = (mode: CameraMode) => {
+    setCameraMode(mode);
+    localStorage.setItem('kinetic_pulse_camera_mode', mode);
+  };
+
   const handleToggleCameraMode = () => {
     setCameraMode((prev) => {
-      if (prev === 'dimmed') return 'silhouette';
-      if (prev === 'silhouette') return 'hidden';
-      return 'dimmed';
+      const next: CameraMode = prev === 'dimmed' ? 'silhouette' : prev === 'silhouette' ? 'hidden' : 'dimmed';
+      localStorage.setItem('kinetic_pulse_camera_mode', next);
+      return next;
     });
   };
 
@@ -265,6 +273,8 @@ export const App: React.FC = () => {
           onStartTutorial={handleStartTutorial}
           onEnableMock={handleEnableMock}
           isMockActive={isMockActive}
+          cameraMode={cameraMode}
+          onSelectCameraMode={handleSelectCameraMode}
         />
       )}
 

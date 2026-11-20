@@ -176,7 +176,7 @@ export class CollisionDetector {
     nose: Point2D | null,
     shoulderCenter: Point2D | null,
     calibration: CalibrationData
-  ): { isActive: boolean; warningAlpha: number; collisionNow: boolean; dodgedNow: boolean } {
+  ): { isActive: boolean; isFinished: boolean; warningAlpha: number; collisionNow: boolean; dodgedNow: boolean } {
     const elapsed = now - barrier.spawnTime;
     const isWarning = elapsed < barrier.warningDuration;
     const isActive = elapsed >= barrier.warningDuration && elapsed < barrier.warningDuration + barrier.activeDuration;
@@ -184,11 +184,11 @@ export class CollisionDetector {
 
     if (isWarning) {
       const warningAlpha = (Math.sin(elapsed / 120 * Math.PI) + 1) / 2; // Pulsing 0..1
-      return { isActive: false, warningAlpha, collisionNow: false, dodgedNow: false };
+      return { isActive: false, isFinished: false, warningAlpha, collisionNow: false, dodgedNow: false };
     }
 
     if (!isActive && !isFinished) {
-      return { isActive: false, warningAlpha: 0, collisionNow: false, dodgedNow: false };
+      return { isActive: false, isFinished: false, warningAlpha: 0, collisionNow: false, dodgedNow: false };
     }
 
     let collisionNow = false;
@@ -235,6 +235,7 @@ export class CollisionDetector {
 
     return {
       isActive,
+      isFinished,
       warningAlpha: isActive ? 1.0 : 0,
       collisionNow,
       dodgedNow,
