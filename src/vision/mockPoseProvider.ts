@@ -74,7 +74,7 @@ export class MockPoseProvider {
     const engine = gameEngine || this.gameEngine;
 
     // Autonomous Bot logic: automatically play the game smoothly if bot active
-    if (this.isBotActive && engine && engine.state === 'playing') {
+    if (this.isBotActive && engine && (engine.state === 'playing' || engine.state === 'tutorial')) {
       this.runBotLogic(engine, now);
     }
 

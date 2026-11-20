@@ -1,6 +1,8 @@
 import {
   GameMode,
   GameState,
+  DifficultyLevel,
+  TutorialStep,
   CalibrationData,
   PulseOrbTarget,
   SolarNodeTarget,
@@ -12,13 +14,21 @@ import { TargetFactory } from './targetFactory';
 import { CollisionDetector } from './collision';
 import { ParticleSystem } from './particleSystem';
 import { soundEngine } from '../audio/soundEngine';
+import { HistoryManager } from '../utils/historyManager';
 
 export class GameEngine {
   public state: GameState = 'idle';
   public mode: GameMode = 'quick';
+  public difficulty: DifficultyLevel = 'medium';
   public timeRemaining: number = 60; // In seconds
   public durationTotal: number = 60;
   public screenShake: number = 0;
+
+  // Tutorial tracking
+  public isTutorialMode: boolean = false;
+  public tutorialStep: TutorialStep = 'intro';
+  public tutorialCount: number = 0; // count hits/dodges in current step
+  public onTutorialStepChange?: (step: TutorialStep, count: number) => void;
 
   public pulseOrbs: PulseOrbTarget[] = [];
   public solarNodes: SolarNodeTarget[] = [];
@@ -62,9 +72,11 @@ export class GameEngine {
   public onStateChange?: (state: GameState) => void;
   public onStatsUpdate?: (stats: PlayerStats) => void;
 
-  public startSession(mode: GameMode, calibration: CalibrationData) {
+  public startSession(mode: GameMode, calibration: CalibrationData, difficulty: DifficultyLevel = 'medium') {
     this.mode = mode;
+    this.difficulty = difficulty;
     this.calibration = calibration;
+    this.isTutorialMode = false;
     this.durationTotal = mode === 'quick' ? 60 : mode === 'endurance' ? 180 : 999999;
     this.timeRemaining = this.durationTotal;
 
@@ -85,8 +97,65 @@ export class GameEngine {
     this.onStatsUpdate?.(this.stats);
   }
 
+  public startTutorial(calibration: CalibrationData) {
+    this.isTutorialMode = true;
+    this.calibration = calibration;
+    this.difficulty = 'easy';
+    this.tutorialStep = 'intro';
+    this.tutorialCount = 0;
+    this.resetStats();
+    this.pulseOrbs = [];
+    this.solarNodes = [];
+    this.laserBarriers = [];
+    this.particles.clear();
+
+    this.gameStartTime = performance.now();
+    this.lastUpdateTime = performance.now();
+    this.state = 'tutorial';
+    this.onStateChange?.(this.state);
+    this.onTutorialStepChange?.(this.tutorialStep, this.tutorialCount);
+
+    setTimeout(() => {
+      if (this.state === 'tutorial') {
+        this.tutorialStep = 'strike';
+        this.tutorialCount = 0;
+        this.onTutorialStepChange?.(this.tutorialStep, this.tutorialCount);
+        this.spawnTutorialTarget();
+      }
+    }, 1500);
+  }
+
+  public advanceTutorialStep(nextStep: TutorialStep) {
+    this.tutorialStep = nextStep;
+    this.tutorialCount = 0;
+    this.pulseOrbs = [];
+    this.solarNodes = [];
+    this.laserBarriers = [];
+    this.onTutorialStepChange?.(this.tutorialStep, this.tutorialCount);
+    this.spawnTutorialTarget();
+  }
+
+  public spawnTutorialTarget() {
+    if (this.state !== 'tutorial') return;
+    if (this.tutorialStep === 'strike') {
+      const orb = this.targetFactory.createPulseOrb(this.calibration, 0.8, 'easy');
+      orb.duration = 2400; // Extra slow for learning!
+      this.pulseOrbs = [orb];
+    } else if (this.tutorialStep === 'hold') {
+      const node = this.targetFactory.createSolarNode(this.calibration, 'easy');
+      node.holdDurationRequired = 500;
+      node.lifetime = 15000; // ample time to hold
+      this.solarNodes = [node];
+    } else if (this.tutorialStep === 'dodge') {
+      const barrier = this.targetFactory.createLaserBarrier(this.calibration, 'easy');
+      barrier.warningDuration = 2200; // Extra clear telegraph warning!
+      this.laserBarriers = [barrier];
+      soundEngine.playLaserWarning();
+    }
+  }
+
   public pauseSession() {
-    if (this.state === 'playing') {
+    if (this.state === 'playing' || this.state === 'tutorial') {
       this.state = 'paused';
       soundEngine.stopSolarCharge();
       this.onStateChange?.(this.state);
@@ -96,7 +165,7 @@ export class GameEngine {
   public resumeSession() {
     if (this.state === 'paused') {
       this.lastUpdateTime = performance.now();
-      this.state = 'playing';
+      this.state = this.isTutorialMode ? 'tutorial' : 'playing';
       this.onStateChange?.(this.state);
     }
   }
@@ -105,6 +174,33 @@ export class GameEngine {
     this.state = 'game_over';
     soundEngine.stopSolarCharge();
     this.saveHighScore();
+
+    // Save to workout history if a real workout was played
+    if (!this.isTutorialMode && this.stats.score > 0) {
+      const getRank = (score: number) => {
+        if (score >= 4500) return 'S';
+        if (score >= 2800) return 'A';
+        if (score >= 1500) return 'B';
+        return 'C';
+      };
+
+      HistoryManager.saveSession({
+        mode: this.mode,
+        difficulty: this.difficulty,
+        posture: this.calibration.posture,
+        score: this.stats.score,
+        rank: getRank(this.stats.score),
+        caloriesBurned: Math.round(this.stats.caloriesBurned * 10) / 10,
+        durationSeconds: Math.round(this.durationTotal - this.timeRemaining),
+        pulseHits: this.stats.pulseHits,
+        powerHits: this.stats.powerHits,
+        solarHolds: this.stats.solarHolds,
+        lasersDodged: this.stats.lasersDodged,
+        lasersHit: this.stats.lasersHit,
+        maxCombo: this.stats.maxCombo,
+      });
+    }
+
     this.onStateChange?.(this.state);
     this.onStatsUpdate?.(this.stats);
   }
@@ -133,7 +229,7 @@ export class GameEngine {
     canvasWidth: number,
     canvasHeight: number
   ) {
-    if (this.state !== 'playing') {
+    if (this.state !== 'playing' && this.state !== 'tutorial') {
       return;
     }
 
@@ -146,20 +242,23 @@ export class GameEngine {
     }
 
     // 1. Update Game Session Timer & Difficulty Scaling
-    if (this.mode !== 'endless') {
-      this.timeRemaining -= dt;
-      if (this.timeRemaining <= 0) {
-        this.timeRemaining = 0;
-        this.endSession();
-        return;
+    if (this.state === 'playing') {
+      if (this.mode !== 'endless') {
+        this.timeRemaining -= dt;
+        if (this.timeRemaining <= 0) {
+          this.timeRemaining = 0;
+          this.endSession();
+          return;
+        }
       }
+
+      const elapsedTotal = (now - this.gameStartTime) / 1000;
+      this.difficultyMultiplier = 1.0 + Math.min(1.0, elapsedTotal / 90); // Ramps over 90s
+
+      // Calculate active calorie burn (scaled by difficulty METs)
+      const mets = this.difficulty === 'easy' ? 5.0 : this.difficulty === 'hard' ? 8.5 : 6.5;
+      this.stats.caloriesBurned += (dt * (mets * 3.5 * 70) / 200 / 60);
     }
-
-    const elapsedTotal = (now - this.gameStartTime) / 1000;
-    this.difficultyMultiplier = 1.0 + Math.min(1.0, elapsedTotal / 90); // Ramps over 90s
-
-    // Calculate approximate active calorie burn (~6.5 METs shadowboxing/mobility)
-    this.stats.caloriesBurned += (dt * (6.5 * 3.5 * 70) / 200 / 60);
 
     // 2. Collision & Motion Update
     this.collision.updateWristPositions(leftWrist, rightWrist, now);
@@ -169,8 +268,10 @@ export class GameEngine {
     );
     this.particles.update(dt);
 
-    // 3. Spawning Director
-    this.spawnDirector(now);
+    // 3. Spawning Director (only in normal play mode)
+    if (!this.isTutorialMode) {
+      this.spawnDirector(now);
+    }
 
     // 4. Update Pulse Orbs
     this.updatePulseOrbs(now, leftWrist, rightWrist, canvasWidth, canvasHeight);
@@ -185,24 +286,27 @@ export class GameEngine {
   }
 
   private spawnDirector(now: number) {
-    // Pulse Orbs spawn every ~1.2s to 1.7s
-    const orbInterval = Math.max(1100, 1700 - (this.difficultyMultiplier - 1) * 400);
+    // Pulse Orbs spawn frequency scaled by difficulty
+    const baseOrbInterval = this.difficulty === 'easy' ? 2000 : this.difficulty === 'hard' ? 1000 : 1500;
+    const minOrbInterval = this.difficulty === 'easy' ? 1500 : this.difficulty === 'hard' ? 700 : 1000;
+    const orbInterval = Math.max(minOrbInterval, baseOrbInterval - (this.difficultyMultiplier - 1) * 350);
     if (now - this.lastSpawnOrbTime > orbInterval) {
-      this.pulseOrbs.push(this.targetFactory.createPulseOrb(this.calibration, this.difficultyMultiplier));
+      this.pulseOrbs.push(this.targetFactory.createPulseOrb(this.calibration, this.difficultyMultiplier, this.difficulty));
       this.lastSpawnOrbTime = now;
     }
 
-    // Solar Nodes spawn every ~5s to 7s (max 2 simultaneously)
-    const solarInterval = 5500;
-    if (this.solarNodes.length < 2 && now - this.lastSpawnSolarTime > solarInterval) {
-      this.solarNodes.push(this.targetFactory.createSolarNode(this.calibration));
+    // Solar Nodes spawn frequency
+    const solarInterval = this.difficulty === 'easy' ? 7500 : this.difficulty === 'hard' ? 3800 : 5500;
+    const maxSolar = this.difficulty === 'hard' ? 2 : 1;
+    if (this.solarNodes.length < maxSolar && now - this.lastSpawnSolarTime > solarInterval) {
+      this.solarNodes.push(this.targetFactory.createSolarNode(this.calibration, this.difficulty));
       this.lastSpawnSolarTime = now;
     }
 
-    // Laser Barriers spawn every ~8s to 12s (max 1 at a time)
-    const laserInterval = 9000;
+    // Laser Barriers spawn frequency
+    const laserInterval = this.difficulty === 'easy' ? 13500 : this.difficulty === 'hard' ? 6500 : 9000;
     if (this.laserBarriers.length === 0 && now - this.lastSpawnLaserTime > laserInterval) {
-      this.laserBarriers.push(this.targetFactory.createLaserBarrier(this.calibration));
+      this.laserBarriers.push(this.targetFactory.createLaserBarrier(this.calibration, this.difficulty));
       this.lastSpawnLaserTime = now;
       soundEngine.playLaserWarning();
     }
@@ -255,6 +359,15 @@ export class GameEngine {
         );
 
         this.pulseOrbs.splice(i, 1);
+        if (this.isTutorialMode && this.tutorialStep === 'strike') {
+          this.tutorialCount++;
+          this.onTutorialStepChange?.(this.tutorialStep, this.tutorialCount);
+          if (this.tutorialCount >= 2) {
+            setTimeout(() => this.advanceTutorialStep('hold'), 1000);
+          } else {
+            setTimeout(() => this.spawnTutorialTarget(), 800);
+          }
+        }
         continue;
       }
 
@@ -263,6 +376,9 @@ export class GameEngine {
         orb.missed = true;
         this.resetCombo();
         this.pulseOrbs.splice(i, 1);
+        if (this.isTutorialMode && this.tutorialStep === 'strike') {
+          setTimeout(() => this.spawnTutorialTarget(), 600);
+        }
       }
     }
   }
@@ -306,6 +422,11 @@ export class GameEngine {
         this.particles.addFloatingText(`SOLAR +${points}!`, px, py, '#ffd700');
 
         this.solarNodes.splice(i, 1);
+        if (this.isTutorialMode && this.tutorialStep === 'hold') {
+          this.tutorialCount++;
+          this.onTutorialStepChange?.(this.tutorialStep, this.tutorialCount);
+          setTimeout(() => this.advanceTutorialStep('dodge'), 1000);
+        }
         continue;
       }
 
@@ -313,6 +434,9 @@ export class GameEngine {
       if (elapsed > node.lifetime && !node.isCompleted) {
         node.missed = true;
         this.solarNodes.splice(i, 1);
+        if (this.isTutorialMode && this.tutorialStep === 'hold') {
+          setTimeout(() => this.spawnTutorialTarget(), 600);
+        }
       }
     }
 
@@ -360,6 +484,11 @@ export class GameEngine {
         this.particles.addFloatingText(`DODGED +${bonus}!`, dodgeX, dodgeY, '#39ff14');
 
         this.laserBarriers.splice(i, 1);
+        if (this.isTutorialMode && this.tutorialStep === 'dodge') {
+          this.tutorialCount++;
+          this.onTutorialStepChange?.(this.tutorialStep, this.tutorialCount);
+          setTimeout(() => this.advanceTutorialStep('outro'), 1000);
+        }
       }
     }
   }

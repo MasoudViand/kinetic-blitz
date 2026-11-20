@@ -1,4 +1,4 @@
-import { CalibrationData, PulseOrbTarget, SolarNodeTarget, LaserBarrierTarget, Point2D } from '../types/game';
+import { CalibrationData, PulseOrbTarget, SolarNodeTarget, LaserBarrierTarget, Point2D, DifficultyLevel } from '../types/game';
 
 export class TargetFactory {
   private idCounter = 0;
@@ -7,7 +7,11 @@ export class TargetFactory {
     return `${prefix}_${++this.idCounter}_${Date.now()}`;
   }
 
-  public createPulseOrb(calibration: CalibrationData, difficultyMultiplier: number = 1.0): PulseOrbTarget {
+  public createPulseOrb(
+    calibration: CalibrationData,
+    difficultyMultiplier: number = 1.0,
+    difficultyLevel: DifficultyLevel = 'medium'
+  ): PulseOrbTarget {
     const isStanding = calibration.posture === 'standing';
     const center = calibration.shoulderCenter;
     const sw = calibration.shoulderWidth;
@@ -35,8 +39,11 @@ export class TargetFactory {
     let targetY = center.y + verticalOffset;
     targetY = Math.max(0.15, Math.min(0.82, targetY));
 
-    // Duration scales down with difficulty (1600ms down to 1050ms)
-    const duration = Math.max(1050, 1600 / (1 + (difficultyMultiplier - 1) * 0.35));
+    // Base duration scales by selected difficulty level
+    const baseDuration = difficultyLevel === 'easy' ? 2000 : difficultyLevel === 'hard' ? 1200 : 1600;
+    const minDuration = difficultyLevel === 'easy' ? 1350 : difficultyLevel === 'hard' ? 750 : 1050;
+    const rampFactor = difficultyLevel === 'easy' ? 0.25 : difficultyLevel === 'hard' ? 0.45 : 0.35;
+    const duration = Math.max(minDuration, baseDuration / (1 + (difficultyMultiplier - 1) * rampFactor));
 
     // Left vs Right hand coloring cues (Cyan for left/neutral, Magenta for right)
     const color = side > 0 ? '#ff007f' : '#00f3ff';
@@ -50,9 +57,9 @@ export class TargetFactory {
       originPos,
       currentPos: { ...originPos },
       scale: 0.2,
-      timingRingScale: 2.2,
+      timingRingScale: difficultyLevel === 'easy' ? 2.4 : 2.2,
       duration,
-      radius: 46,
+      radius: difficultyLevel === 'easy' ? 50 : 46,
       color,
       isHit: false,
       powerHit: false,
@@ -60,7 +67,10 @@ export class TargetFactory {
     };
   }
 
-  public createSolarNode(calibration: CalibrationData): SolarNodeTarget {
+  public createSolarNode(
+    calibration: CalibrationData,
+    difficultyLevel: DifficultyLevel = 'medium'
+  ): SolarNodeTarget {
     const isStanding = calibration.posture === 'standing';
     const center = calibration.shoulderCenter;
     const sw = calibration.shoulderWidth;
@@ -75,6 +85,9 @@ export class TargetFactory {
     // High overhead or upper shoulder
     const targetY = Math.max(0.12, center.y - (isStanding ? 0.25 : 0.2) - Math.random() * 0.1);
 
+    const holdDurationRequired = difficultyLevel === 'easy' ? 450 : difficultyLevel === 'hard' ? 700 : 600;
+    const lifetime = difficultyLevel === 'easy' ? 6500 : difficultyLevel === 'hard' ? 4500 : 5500;
+
     return {
       id: this.nextId('solar'),
       kind: 'solar_node',
@@ -84,17 +97,20 @@ export class TargetFactory {
       currentPos: { x: targetX, y: targetY },
       amplitude: 0.02 + Math.random() * 0.02,
       frequency: 1.5 + Math.random() * 1.5,
-      holdDurationRequired: 600, // 600ms hold
+      holdDurationRequired,
       currentHoldTime: 0,
-      radius: 54,
+      radius: difficultyLevel === 'easy' ? 58 : 54,
       activeHand: null,
       isCompleted: false,
-      lifetime: 5500, // 5.5s to reach and hold
+      lifetime,
       missed: false,
     };
   }
 
-  public createLaserBarrier(calibration: CalibrationData): LaserBarrierTarget {
+  public createLaserBarrier(
+    calibration: CalibrationData,
+    difficultyLevel: DifficultyLevel = 'medium'
+  ): LaserBarrierTarget {
     const isStanding = calibration.posture === 'standing';
     const orientations: ('horizontal_squat' | 'vertical_left' | 'vertical_right')[] = isStanding
       ? ['horizontal_squat', 'vertical_left', 'vertical_right']
@@ -102,14 +118,17 @@ export class TargetFactory {
 
     const chosen = orientations[Math.floor(Math.random() * orientations.length)];
 
+    const warningDuration = difficultyLevel === 'easy' ? 1900 : difficultyLevel === 'hard' ? 1150 : 1500;
+    const activeDuration = difficultyLevel === 'easy' ? 750 : difficultyLevel === 'hard' ? 950 : 850;
+
     return {
       id: this.nextId('laser'),
       kind: 'laser_barrier',
       createdAt: performance.now(),
       spawnTime: performance.now(),
       orientation: chosen,
-      warningDuration: 1500, // 1.5s telegraph warning
-      activeDuration: 850,   // 850ms dangerous active beam
+      warningDuration,
+      activeDuration,
       isDodged: false,
       hasCollided: false,
       damageApplied: false,

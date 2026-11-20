@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { PlayerStats, GameMode } from '../types/game';
+import { PlayerStats, GameMode, DifficultyLevel } from '../types/game';
 import confetti from 'canvas-confetti';
 import {
   Trophy,
@@ -15,6 +15,7 @@ import {
 interface SummaryModalProps {
   stats: PlayerStats;
   mode: GameMode;
+  difficulty?: DifficultyLevel;
   onPlayAgain: () => void;
   onReturnToMenu: () => void;
 }
@@ -22,6 +23,7 @@ interface SummaryModalProps {
 export const SummaryModal: React.FC<SummaryModalProps> = ({
   stats,
   mode,
+  difficulty = 'medium',
   onPlayAgain,
   onReturnToMenu,
 }) => {
@@ -69,7 +71,9 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
         <h3 className="text-2xl md:text-3xl font-black font-arcade text-white tracking-wider">
           WORKOUT COMPLETE
         </h3>
-        <p className="text-xs text-gray-400 capitalize mb-3.5">{mode} Session</p>
+        <p className="text-xs text-gray-400 capitalize mb-3.5">
+          <span className="uppercase text-pulse-cyan font-bold font-arcade">{difficulty}</span> • {mode} Session
+        </p>
 
         {/* Score & Rank Card */}
         <div className="w-full flex items-center justify-between p-3.5 rounded-xl bg-black/60 border border-slate-800 mb-3.5">

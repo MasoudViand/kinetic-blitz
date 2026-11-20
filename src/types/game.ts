@@ -12,6 +12,7 @@ export interface Landmark3D {
 
 export type PostureType = 'standing' | 'seated' | 'uncalibrated';
 export type GameMode = 'quick' | 'endurance' | 'endless';
+export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 export type CameraMode = 'dimmed' | 'silhouette' | 'hidden';
 
 export type GameState = 
@@ -20,7 +21,28 @@ export type GameState =
   | 'countdown' 
   | 'playing' 
   | 'paused' 
-  | 'game_over';
+  | 'game_over'
+  | 'tutorial';
+
+export type TutorialStep = 'intro' | 'strike' | 'hold' | 'dodge' | 'outro';
+
+export interface SessionRecord {
+  id: string;
+  date: string;
+  mode: GameMode;
+  difficulty: DifficultyLevel;
+  posture: PostureType;
+  score: number;
+  rank: string;
+  caloriesBurned: number;
+  durationSeconds: number;
+  pulseHits: number;
+  powerHits: number;
+  solarHolds: number;
+  lasersDodged: number;
+  lasersHit: number;
+  maxCombo: number;
+}
 
 export interface CalibrationData {
   shoulderCenter: Point2D;

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { GameMode, GameState, CameraMode, PostureType, PlayerStats, Landmark3D, Point2D } from './types/game';
+import { GameMode, GameState, CameraMode, PostureType, DifficultyLevel, TutorialStep, PlayerStats, Landmark3D, Point2D } from './types/game';
 import { GameEngine } from './engine/gameEngine';
 import { canvasRenderer } from './renderer/canvasRenderer';
 import { poseService } from './vision/poseService';
@@ -11,6 +11,7 @@ import { StartScreen } from './components/StartScreen';
 import { CalibrationOverlay } from './components/CalibrationOverlay';
 import { GameHUD } from './components/GameHUD';
 import { SummaryModal } from './components/SummaryModal';
+import { TutorialOverlay } from './components/TutorialOverlay';
 import { DevToolbar } from './components/DevToolbar';
 
 export const App: React.FC = () => {
@@ -20,12 +21,17 @@ export const App: React.FC = () => {
 
   const [gameState, setGameState] = useState<GameState>('idle');
   const [gameMode, setGameMode] = useState<GameMode>('quick');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>('medium');
   const [cameraMode, setCameraMode] = useState<CameraMode>('dimmed');
   const [isMuted, setIsMuted] = useState<boolean>(soundEngine.getMuted());
   const [detectedPosture, setDetectedPosture] = useState<PostureType>('uncalibrated');
   const [timeRemaining, setTimeRemaining] = useState<number>(60);
   const [isMockActive, setIsMockActive] = useState<boolean>(mockPoseProvider.enabled);
   const [stats, setStats] = useState<PlayerStats>(engineRef.current.stats);
+
+  const [isTutorial, setIsTutorial] = useState<boolean>(false);
+  const [tutorialStep, setTutorialStep] = useState<TutorialStep>('intro');
+  const [tutorialCount, setTutorialCount] = useState<number>(0);
 
   const landmarksRef = useRef<Landmark3D[] | null>(null);
 
@@ -38,6 +44,10 @@ export const App: React.FC = () => {
     engine.onStatsUpdate = (newStats) => {
       setStats({ ...newStats });
       setTimeRemaining(engine.timeRemaining);
+    };
+    engine.onTutorialStepChange = (step, count) => {
+      setTutorialStep(step);
+      setTutorialCount(count);
     };
   }, []);
 
@@ -139,9 +149,22 @@ export const App: React.FC = () => {
   }, [cameraMode]);
 
   // Workout Flow Controls
-  const handleStartWorkout = (mode: GameMode, posturePref: PostureType) => {
+  const handleStartWorkout = (mode: GameMode, posturePref: PostureType, selectedDifficulty: DifficultyLevel) => {
     setGameMode(mode);
+    setDifficulty(selectedDifficulty);
+    setIsTutorial(false);
     setDetectedPosture(posturePref);
+    postureDetector.resetCalibration();
+
+    const engine = engineRef.current;
+    engine.difficulty = selectedDifficulty;
+    engine.state = 'calibrating';
+    setGameState('calibrating');
+  };
+
+  const handleStartTutorial = () => {
+    setIsTutorial(true);
+    setDetectedPosture('uncalibrated');
     postureDetector.resetCalibration();
 
     const engine = engineRef.current;
@@ -157,8 +180,12 @@ export const App: React.FC = () => {
     engine.calibration = finalCalibration;
     setDetectedPosture(finalCalibration.posture);
 
-    engine.startSession(gameMode, finalCalibration);
-  }, [gameMode]);
+    if (isTutorial) {
+      engine.startTutorial(finalCalibration);
+    } else {
+      engine.startSession(gameMode, finalCalibration, difficulty);
+    }
+  }, [gameMode, difficulty, isTutorial]);
 
   const handleManualPostureOverride = (overridePosture: PostureType) => {
     setDetectedPosture(overridePosture);
@@ -182,7 +209,7 @@ export const App: React.FC = () => {
 
   const handlePauseToggle = () => {
     const engine = engineRef.current;
-    if (engine.state === 'playing') {
+    if (engine.state === 'playing' || engine.state === 'tutorial') {
       engine.pauseSession();
     } else if (engine.state === 'paused') {
       engine.resumeSession();
@@ -191,12 +218,17 @@ export const App: React.FC = () => {
 
   const handleRestart = () => {
     const engine = engineRef.current;
-    engine.startSession(gameMode, engine.calibration);
+    if (isTutorial) {
+      engine.startTutorial(engine.calibration);
+    } else {
+      engine.startSession(gameMode, engine.calibration, difficulty);
+    }
   };
 
   const handleExitToMenu = () => {
     const engine = engineRef.current;
     engine.state = 'idle';
+    setIsTutorial(false);
     setGameState('idle');
   };
 
@@ -229,6 +261,7 @@ export const App: React.FC = () => {
       {gameState === 'idle' && (
         <StartScreen
           onStart={handleStartWorkout}
+          onStartTutorial={handleStartTutorial}
           onEnableMock={handleEnableMock}
           isMockActive={isMockActive}
         />
@@ -240,6 +273,18 @@ export const App: React.FC = () => {
           calibration={engineRef.current.calibration}
           onComplete={handleCalibrationComplete}
           onManualOverride={handleManualPostureOverride}
+        />
+      )}
+
+      {gameState === 'tutorial' && (
+        <TutorialOverlay
+          step={tutorialStep}
+          count={tutorialCount}
+          onSkip={handleExitToMenu}
+          onFinishAndStart={() => {
+            setIsTutorial(false);
+            engineRef.current.startSession('quick', engineRef.current.calibration, difficulty);
+          }}
         />
       )}
 
@@ -264,6 +309,7 @@ export const App: React.FC = () => {
         <SummaryModal
           stats={stats}
           mode={gameMode}
+          difficulty={difficulty}
           onPlayAgain={handleRestart}
           onReturnToMenu={handleExitToMenu}
         />
