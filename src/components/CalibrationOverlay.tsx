@@ -15,7 +15,7 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
   onComplete,
   onManualOverride,
 }) => {
-  const [countdown, setCountdown] = useState<number>(3);
+  const [countdown, setCountdown] = useState<number>(5);
   const [currentPosture, setCurrentPosture] = useState<PostureType>(detectedPosture === 'uncalibrated' ? 'standing' : detectedPosture);
 
   useEffect(() => {
