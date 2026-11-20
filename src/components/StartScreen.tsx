@@ -285,24 +285,26 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             </div>
           </div>
 
-          {/* Privacy & Mock Mode Links */}
-          <div className="flex flex-col sm:flex-row items-center justify-between w-full text-xs text-gray-400 gap-2">
+          {/* Privacy & Mock Mode Links (Mock mode only in dev mode) */}
+          <div className={`flex flex-col sm:flex-row items-center w-full text-xs text-gray-400 gap-2 ${import.meta.env.DEV ? 'justify-between' : 'justify-center'}`}>
             <div className="flex items-center gap-1.5 text-gray-400">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>100% on-device vision. Zero video leaves browser.</span>
             </div>
 
-            <button
-              onClick={onEnableMock}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded border transition-all ${
-                isMockActive
-                  ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300'
-                  : 'border-slate-800 hover:border-slate-700 text-gray-400 hover:text-white'
-              }`}
-            >
-              <Bot className="w-3.5 h-3.5" />
-              <span>{isMockActive ? 'Mock Pose Active' : 'Test Without Camera'}</span>
-            </button>
+            {import.meta.env.DEV && (
+              <button
+                onClick={onEnableMock}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded border transition-all ${
+                  isMockActive
+                    ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300'
+                    : 'border-slate-800 hover:border-slate-700 text-gray-400 hover:text-white'
+                }`}
+              >
+                <Bot className="w-3.5 h-3.5" />
+                <span>{isMockActive ? 'Mock Pose Active' : 'Test Without Camera'}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
