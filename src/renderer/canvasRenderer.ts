@@ -149,7 +149,7 @@ export class CanvasRenderer {
 
       // 2. Outer Shrinking Timing Ring
       const ringRadius = currentRadius * orb.timingRingScale;
-      const isHitWindow = orb.scale >= 0.75 && orb.scale <= 1.15;
+      const isHitWindow = orb.scale >= 0.75;
 
       ctx.strokeStyle = isHitWindow ? '#ffffff' : orb.color;
       ctx.lineWidth = isHitWindow ? 3.5 : 2;

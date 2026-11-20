@@ -377,8 +377,18 @@ export class GameEngine {
         continue;
       }
 
-      // Check miss: orb timed out past scale 1.18
-      if (progress > 1.18 && !orb.isHit) {
+      // Check miss: orb continues past the player and is only missed once it completely exits the screen
+      const orbPixelX = orb.currentPos.x * canvasWidth;
+      const orbPixelY = orb.currentPos.y * canvasHeight;
+      const currentRadius = orb.radius * orb.scale;
+
+      const isOffscreen =
+        orbPixelX + currentRadius < 0 ||
+        orbPixelX - currentRadius > canvasWidth ||
+        orbPixelY + currentRadius < 0 ||
+        orbPixelY - currentRadius > canvasHeight;
+
+      if ((isOffscreen || progress > 3.0) && !orb.isHit) {
         orb.missed = true;
         this.resetCombo();
         this.pulseOrbs.splice(i, 1);

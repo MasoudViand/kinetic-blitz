@@ -74,17 +74,26 @@ export class CollisionDetector {
   ): HitResult | null {
     if (orb.isHit || orb.missed) return null;
 
-    // Check hit window timing:
-    // Regular gameplay: 0.60 to 1.25
-    // Tutorial: extra forgiving window (0.45 to 1.35)
-    const minScale = isTutorial ? 0.45 : 0.60;
-    const maxScale = isTutorial ? 1.35 : 1.25;
-    if (orb.scale < minScale || orb.scale > maxScale) return null;
+    // Check hit window:
+    // Minimum scale required before an orb can be struck (avoid hitting far background spawns)
+    // Players can hit orbs continuously until they leave the screen!
+    const minScale = isTutorial ? 0.45 : 0.55;
+    if (orb.scale < minScale) return null;
 
     const orbPixelX = orb.currentPos.x * canvasWidth;
     const orbPixelY = orb.currentPos.y * canvasHeight;
     const radiusMult = isTutorial ? 1.45 : 1.22;
     const hitRadius = orb.radius * Math.max(1.0, orb.scale) * radiusMult; // Generous hit registration
+
+    // Cannot hit an orb that has already fully exited the screen
+    if (
+      orbPixelX + hitRadius < 0 ||
+      orbPixelX - hitRadius > canvasWidth ||
+      orbPixelY + hitRadius < 0 ||
+      orbPixelY - hitRadius > canvasHeight
+    ) {
+      return null;
+    }
 
     // Check both hands
     const hands: { name: 'left' | 'right'; pt: Point2D | null }[] = [
