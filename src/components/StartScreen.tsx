@@ -17,6 +17,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { HistoryModal } from './HistoryModal';
+import { WelcomeModal } from './WelcomeModal';
 
 interface StartScreenProps {
   onStart: (mode: GameMode, posturePreference: PostureType, difficulty: DifficultyLevel) => void;
@@ -39,6 +40,14 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>('medium');
   const [posturePref, setPosturePref] = useState<PostureType>('uncalibrated');
   const [showHistory, setShowHistory] = useState(false);
+  const [showWelcome, setShowWelcome] = useState<boolean>(() => {
+    return localStorage.getItem('kinetic_blitz_welcome_dismissed') !== 'true';
+  });
+
+  const handleDismissWelcome = () => {
+    localStorage.setItem('kinetic_blitz_welcome_dismissed', 'true');
+    setShowWelcome(false);
+  };
 
   const modes: { id: GameMode; title: string; desc: string; icon: React.ReactNode; duration: string }[] = [
     {
@@ -287,10 +296,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({
 
           {/* Privacy & Mock Mode Links (Mock mode only in dev mode) */}
           <div className={`flex flex-col sm:flex-row items-center w-full text-xs text-gray-400 gap-2 ${import.meta.env.DEV ? 'justify-between' : 'justify-center'}`}>
-            <div className="flex items-center gap-1.5 text-gray-400">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>100% on-device vision. Zero video leaves browser.</span>
-            </div>
+            <button
+              onClick={() => setShowWelcome(true)}
+              className="flex items-center gap-1.5 text-gray-400 hover:text-pulse-cyan transition-colors group cursor-pointer"
+              title="Click to view offline privacy & open source details"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
+              <span>100% on-device vision • Open source</span>
+              <span className="text-[10px] text-gray-500 underline decoration-dotted group-hover:text-pulse-cyan ml-1">About</span>
+            </button>
 
             {import.meta.env.DEV && (
               <button
@@ -308,6 +322,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Welcome / Info Modal (one-time dismissable on initial load) */}
+      {showWelcome && <WelcomeModal onClose={handleDismissWelcome} />}
 
       {/* History Modal */}
       {showHistory && <HistoryModal onClose={() => setShowHistory(false)} />}
