@@ -56,16 +56,18 @@ class PoseService {
         };
       });
 
-      // 2. Initialize MediaPipe PoseLandmarker (singleton - only downloaded & created once)
+      // 2. Initialize MediaPipe PoseLandmarker (local bundle assets - zero external network calls)
       if (!this.landmarker) {
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-        );
+        const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const wasmPath = `${origin}${baseUrl}/wasm`;
+        const modelPath = `${origin}${baseUrl}/models/pose_landmarker_lite.task`;
+
+        const vision = await FilesetResolver.forVisionTasks(wasmPath);
 
         this.landmarker = await PoseLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath:
-              'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+            modelAssetPath: modelPath,
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
