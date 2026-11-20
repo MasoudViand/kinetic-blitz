@@ -326,8 +326,10 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* 4. Developer & Mock Pose Toolbar */}
-      <DevToolbar onPostureChanged={handleManualPostureOverride} />
+      {/* 4. Developer & Mock Pose Toolbar (Only visible in dev mode) */}
+      {import.meta.env.DEV && (
+        <DevToolbar onPostureChanged={handleManualPostureOverride} />
+      )}
     </div>
   );
 };
