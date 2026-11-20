@@ -19,7 +19,7 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
     switch (step) {
       case 'intro':
         return {
-          title: 'WELCOME TO KINETIC PULSE',
+          title: 'WELCOME TO KINETIC BLITZ',
           desc: 'Your webcam tracks your body in real-time like a mirror. Let’s learn the 3 core movements!',
           badge: 'GET READY',
           color: 'text-pulse-cyan border-pulse-cyan',

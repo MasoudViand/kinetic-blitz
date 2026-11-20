@@ -5,7 +5,7 @@ class SoundEngine {
   private chargeGain: GainNode | null = null;
 
   constructor() {
-    const saved = localStorage.getItem('kinetic_pulse_muted');
+    const saved = localStorage.getItem('kinetic_blitz_muted') ?? localStorage.getItem('kinetic_pulse_muted');
     if (saved !== null) {
       this.isMuted = saved === 'true';
     }
@@ -23,7 +23,7 @@ class SoundEngine {
 
   public toggleMute(): boolean {
     this.isMuted = !this.isMuted;
-    localStorage.setItem('kinetic_pulse_muted', String(this.isMuted));
+    localStorage.setItem('kinetic_blitz_muted', String(this.isMuted));
     if (this.isMuted && this.chargeGain) {
       this.chargeGain.gain.setValueAtTime(0, this.ctx?.currentTime || 0);
     }

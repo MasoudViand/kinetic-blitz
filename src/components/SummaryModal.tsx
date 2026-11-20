@@ -35,8 +35,8 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
   };
 
   const { rank, color } = getRank(stats.score);
-  const highscoreKey = `kinetic_pulse_highscore_${mode}`;
-  const highscore = parseInt(localStorage.getItem(highscoreKey) || '0', 10);
+  const highscoreKey = `kinetic_blitz_highscore_${mode}`;
+  const highscore = parseInt(localStorage.getItem(highscoreKey) || localStorage.getItem(`kinetic_pulse_highscore_${mode}`) || '0', 10);
   const isNewRecord = stats.score > 0 && stats.score >= highscore;
 
   useEffect(() => {

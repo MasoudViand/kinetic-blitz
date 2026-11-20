@@ -24,7 +24,7 @@ export const App: React.FC = () => {
   const [gameMode, setGameMode] = useState<GameMode>('quick');
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('medium');
   const [cameraMode, setCameraMode] = useState<CameraMode>(() => {
-    const saved = localStorage.getItem('kinetic_pulse_camera_mode');
+    const saved = localStorage.getItem('kinetic_blitz_camera_mode') || localStorage.getItem('kinetic_pulse_camera_mode');
     return (saved === 'dimmed' || saved === 'silhouette' || saved === 'hidden') ? saved : 'dimmed';
   });
   const [isMuted, setIsMuted] = useState<boolean>(soundEngine.getMuted());
@@ -42,7 +42,7 @@ export const App: React.FC = () => {
   // Sync state callbacks from GameEngine
   useEffect(() => {
     const engine = engineRef.current;
-    (window as unknown as { __KINETIC_PULSE_ENGINE__: GameEngine }).__KINETIC_PULSE_ENGINE__ = engine;
+    (window as unknown as { __KINETIC_BLITZ_ENGINE__: GameEngine }).__KINETIC_BLITZ_ENGINE__ = engine;
     mockPoseProvider.setGameEngine(engine);
     engine.onStateChange = (newState) => setGameState(newState);
     engine.onStatsUpdate = (newStats) => {
@@ -205,13 +205,13 @@ export const App: React.FC = () => {
 
   const handleSelectCameraMode = (mode: CameraMode) => {
     setCameraMode(mode);
-    localStorage.setItem('kinetic_pulse_camera_mode', mode);
+    localStorage.setItem('kinetic_blitz_camera_mode', mode);
   };
 
   const handleToggleCameraMode = () => {
     setCameraMode((prev) => {
       const next: CameraMode = prev === 'dimmed' ? 'silhouette' : prev === 'silhouette' ? 'hidden' : 'dimmed';
-      localStorage.setItem('kinetic_pulse_camera_mode', next);
+      localStorage.setItem('kinetic_blitz_camera_mode', next);
       return next;
     });
   };

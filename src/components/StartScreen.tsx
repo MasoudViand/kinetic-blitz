@@ -125,7 +125,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               Webcam Fitness Exergame
             </div>
             <h1 className="text-4xl md:text-5xl font-black font-arcade tracking-wider bg-gradient-to-r from-pulse-cyan via-white to-pulse-magenta bg-clip-text text-transparent drop-shadow-md">
-              KINETIC PULSE
+              KINETIC BLITZ
             </h1>
             <p className="text-gray-300 text-xs md:text-sm mt-2 max-w-md mx-auto text-center leading-relaxed">
               Strike approaching pseudo-3D orbs, reach & hold mobility nodes, and dodge laser barriers calibrated to your body.

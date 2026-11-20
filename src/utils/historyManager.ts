@@ -1,11 +1,12 @@
 import { SessionRecord } from '../types/game';
 
-const STORAGE_KEY = 'kinetic_pulse_workout_history';
+const STORAGE_KEY = 'kinetic_blitz_workout_history';
+const LEGACY_STORAGE_KEY = 'kinetic_pulse_workout_history';
 
 export class HistoryManager {
   public static getHistory(): SessionRecord[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
+      const data = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
       if (!data) return [];
       return JSON.parse(data) as SessionRecord[];
     } catch {

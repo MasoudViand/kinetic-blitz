@@ -535,8 +535,8 @@ export class GameEngine {
   }
 
   private saveHighScore() {
-    const key = `kinetic_pulse_highscore_${this.mode}`;
-    const prev = parseInt(localStorage.getItem(key) || '0', 10);
+    const key = `kinetic_blitz_highscore_${this.mode}`;
+    const prev = parseInt(localStorage.getItem(key) || localStorage.getItem(`kinetic_pulse_highscore_${this.mode}`) || '0', 10);
     if (this.stats.score > prev) {
       localStorage.setItem(key, String(this.stats.score));
     }
