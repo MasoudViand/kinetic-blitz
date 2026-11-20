@@ -139,7 +139,13 @@ export class GameEngine {
     if (this.state !== 'tutorial') return;
     if (this.tutorialStep === 'strike') {
       const orb = this.targetFactory.createPulseOrb(this.calibration, 0.8, 'easy');
-      orb.duration = 2400; // Extra slow for learning!
+      orb.duration = 2800; // Extra slow for learning!
+      // Center the target at a comfortable reach in front of user
+      const side = this.tutorialCount === 0 ? -1 : 1;
+      const sw = this.calibration.shoulderWidth;
+      orb.targetPos.x = Math.max(0.2, Math.min(0.8, this.calibration.shoulderCenter.x + side * sw * 0.85));
+      orb.targetPos.y = Math.max(0.25, Math.min(0.7, this.calibration.shoulderCenter.y - 0.05));
+      orb.color = side > 0 ? '#ff007f' : '#00f3ff';
       this.pulseOrbs = [orb];
     } else if (this.tutorialStep === 'hold') {
       const node = this.targetFactory.createSolarNode(this.calibration, 'easy');
@@ -148,7 +154,7 @@ export class GameEngine {
       this.solarNodes = [node];
     } else if (this.tutorialStep === 'dodge') {
       const barrier = this.targetFactory.createLaserBarrier(this.calibration, 'easy');
-      barrier.warningDuration = 2200; // Extra clear telegraph warning!
+      barrier.warningDuration = 2400; // Extra clear telegraph warning!
       this.laserBarriers = [barrier];
       soundEngine.playLaserWarning();
     }
@@ -333,7 +339,7 @@ export class GameEngine {
       orb.currentPos.y = orb.originPos.y + (orb.targetPos.y - orb.originPos.y) * progress;
 
       // Check collision
-      const hit = this.collision.checkPulseOrbCollision(orb, leftWrist, rightWrist, canvasWidth, canvasHeight);
+      const hit = this.collision.checkPulseOrbCollision(orb, leftWrist, rightWrist, canvasWidth, canvasHeight, this.isTutorialMode);
       if (hit) {
         // Registered hit!
         const points = hit.isPower ? 150 : 100;

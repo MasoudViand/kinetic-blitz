@@ -2,8 +2,10 @@ import {
   CameraMode,
   Landmark3D,
   CalibrationData,
+  Point2D,
 } from '../types/game';
 import { GameEngine } from '../engine/gameEngine';
+import { getFistPosition } from '../vision/handTracking';
 
 export class CanvasRenderer {
   public render(
@@ -334,13 +336,13 @@ export class CanvasRenderer {
     height: number,
     engine: GameEngine
   ) {
-    const leftWrist = landmarks[15];
-    const rightWrist = landmarks[16];
+    const leftFist = getFistPosition(landmarks, 'left');
+    const rightFist = getFistPosition(landmarks, 'right');
 
-    const drawReticle = (lm: Landmark3D | undefined, color: string, hand: 'left' | 'right') => {
-      if (!lm || (lm.visibility ?? 1) < 0.45) return;
-      const x = lm.x * width;
-      const y = lm.y * height;
+    const drawReticle = (pt: Point2D | null, color: string, hand: 'left' | 'right') => {
+      if (!pt) return;
+      const x = pt.x * width;
+      const y = pt.y * height;
       const vel = engine.collision.getWristVelocity(hand);
       const isFast = vel > 1.2;
 
@@ -379,8 +381,8 @@ export class CanvasRenderer {
       ctx.restore();
     };
 
-    drawReticle(leftWrist, '#00f3ff', 'left');
-    drawReticle(rightWrist, '#ff007f', 'right');
+    drawReticle(leftFist, '#00f3ff', 'left');
+    drawReticle(rightFist, '#ff007f', 'right');
   }
 
   public renderCalibrationGuide(

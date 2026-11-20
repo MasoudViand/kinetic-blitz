@@ -120,11 +120,11 @@ export class MockPoseProvider {
     landmarks[15] = { x: this.leftHandCurrent.x, y: this.leftHandCurrent.y, z: -0.05, visibility: 0.99 };
     landmarks[16] = { x: this.rightHandCurrent.x, y: this.rightHandCurrent.y, z: -0.05, visibility: 0.99 };
 
-    // 17-22: Hands & fingers
+    // 17-22: Hands & fingers (aligned with hand center)
     for (let i = 17; i <= 22; i++) {
       const isLeft = i % 2 !== 0;
       const refWrist = isLeft ? landmarks[15] : landmarks[16];
-      landmarks[i] = { x: refWrist.x, y: refWrist.y + 0.02, z: refWrist.z, visibility: 0.9 };
+      landmarks[i] = { x: refWrist.x, y: refWrist.y, z: refWrist.z, visibility: 0.95 };
     }
 
     // 23: Left Hip, 24: Right Hip

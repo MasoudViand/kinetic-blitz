@@ -113,13 +113,49 @@ class PoseService {
             const result = this.landmarker.detectForVideo(this.video, performance.now());
             if (result.landmarks && result.landmarks.length > 0) {
               const raw = result.landmarks[0];
-              // Mirror horizontal coordinate (1 - x) to match natural mirror reflection
-              resultLandmarks = raw.map((lm) => ({
-                x: 1 - lm.x,
-                y: lm.y,
-                z: lm.z,
-                visibility: lm.visibility,
-              }));
+
+              // Correct for CSS object-cover on the <video> element so canvas coordinates
+              // align pixel-for-pixel with the mirrored video on screen
+              const vw = this.video.videoWidth || 1280;
+              const vh = this.video.videoHeight || 720;
+              const cw = this.video.clientWidth || window.innerWidth;
+              const ch = this.video.clientHeight || window.innerHeight;
+
+              const vAspect = vw / vh;
+              const cAspect = cw / ch;
+
+              let scale = 1;
+              let offsetX = 0;
+              let offsetY = 0;
+
+              if (cAspect > vAspect) {
+                // Container wider than video -> video fits width, crops top/bottom
+                scale = cw / vw;
+                const renderedH = vh * scale;
+                offsetY = (ch - renderedH) / 2;
+              } else {
+                // Container narrower than video -> video fits height, crops left/right
+                scale = ch / vh;
+                const renderedW = vw * scale;
+                offsetX = (cw - renderedW) / 2;
+              }
+
+              const renderedW = vw * scale;
+              const renderedH = vh * scale;
+
+              // Mirror horizontal coordinate (1 - x) to match CSS scale-x-[-1]
+              resultLandmarks = raw.map((lm) => {
+                const mirroredX = 1 - lm.x;
+                const screenPxX = mirroredX * renderedW + offsetX;
+                const screenPxY = lm.y * renderedH + offsetY;
+
+                return {
+                  x: Math.max(0, Math.min(1, screenPxX / cw)),
+                  y: Math.max(0, Math.min(1, screenPxY / ch)),
+                  z: lm.z,
+                  visibility: lm.visibility,
+                };
+              });
             }
           } catch (e) {
             console.error('Inference error:', e);

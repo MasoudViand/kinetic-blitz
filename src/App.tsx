@@ -6,6 +6,7 @@ import { poseService } from './vision/poseService';
 import { postureDetector } from './vision/postureDetector';
 import { mockPoseProvider } from './vision/mockPoseProvider';
 import { soundEngine } from './audio/soundEngine';
+import { getFistPosition } from './vision/handTracking';
 
 import { StartScreen } from './components/StartScreen';
 import { CalibrationOverlay } from './components/CalibrationOverlay';
@@ -68,7 +69,7 @@ export const App: React.FC = () => {
       // Check Presence & Handle Auto-Pause
       const isPresent = postureDetector.checkPresence(landmarks);
 
-      if (engine.state === 'playing') {
+      if (engine.state === 'playing' || engine.state === 'tutorial') {
         postureDetector.handlePresenceTracking(isPresent, now, () => {
           engine.pauseSession();
         });
@@ -112,8 +113,8 @@ export const App: React.FC = () => {
           let shoulderCenter: Point2D | null = null;
 
           if (landmarks && landmarks.length > 16) {
-            if ((landmarks[15].visibility ?? 1) > 0.4) leftWrist = { x: landmarks[15].x, y: landmarks[15].y };
-            if ((landmarks[16].visibility ?? 1) > 0.4) rightWrist = { x: landmarks[16].x, y: landmarks[16].y };
+            leftWrist = getFistPosition(landmarks, 'left');
+            rightWrist = getFistPosition(landmarks, 'right');
             if ((landmarks[0].visibility ?? 1) > 0.4) nose = { x: landmarks[0].x, y: landmarks[0].y };
             if ((landmarks[11].visibility ?? 1) > 0.4 && (landmarks[12].visibility ?? 1) > 0.4) {
               shoulderCenter = {
@@ -124,7 +125,7 @@ export const App: React.FC = () => {
           }
 
           // Update Engine
-          if (engine.state === 'playing') {
+          if (engine.state === 'playing' || engine.state === 'tutorial') {
             engine.update(time, leftWrist, rightWrist, nose, shoulderCenter, canvas.width, canvas.height);
           }
 

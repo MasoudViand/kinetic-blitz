@@ -69,16 +69,22 @@ export class CollisionDetector {
     leftWrist: Point2D | null,
     rightWrist: Point2D | null,
     canvasWidth: number,
-    canvasHeight: number
+    canvasHeight: number,
+    isTutorial: boolean = false
   ): HitResult | null {
     if (orb.isHit || orb.missed) return null;
 
-    // Check hit window timing (scale between 0.72 and 1.20)
-    if (orb.scale < 0.72 || orb.scale > 1.20) return null;
+    // Check hit window timing:
+    // Regular gameplay: 0.60 to 1.25
+    // Tutorial: extra forgiving window (0.45 to 1.35)
+    const minScale = isTutorial ? 0.45 : 0.60;
+    const maxScale = isTutorial ? 1.35 : 1.25;
+    if (orb.scale < minScale || orb.scale > maxScale) return null;
 
     const orbPixelX = orb.currentPos.x * canvasWidth;
     const orbPixelY = orb.currentPos.y * canvasHeight;
-    const hitRadius = orb.radius * Math.max(1.0, orb.scale) * 1.15; // Generous hit registration
+    const radiusMult = isTutorial ? 1.45 : 1.22;
+    const hitRadius = orb.radius * Math.max(1.0, orb.scale) * radiusMult; // Generous hit registration
 
     // Check both hands
     const hands: { name: 'left' | 'right'; pt: Point2D | null }[] = [
