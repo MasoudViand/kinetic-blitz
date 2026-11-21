@@ -16,6 +16,8 @@ import {
   Armchair,
   CheckCircle2,
   Menu,
+  CameraOff,
+  Camera,
 } from 'lucide-react';
 
 interface PhoneRemoteViewProps {
@@ -25,6 +27,8 @@ interface PhoneRemoteViewProps {
   onTogglePosture: () => void;
   tvState: TvStateUpdate | null;
   onSendCommand: (cmd: TvControlCommand) => void;
+  isCameraActive?: boolean;
+  onRetryCamera?: () => void;
 }
 
 export const PhoneRemoteView: React.FC<PhoneRemoteViewProps> = ({
@@ -34,6 +38,8 @@ export const PhoneRemoteView: React.FC<PhoneRemoteViewProps> = ({
   onTogglePosture,
   tvState,
   onSendCommand,
+  isCameraActive = true,
+  onRetryCamera,
 }) => {
   const [selectedMode, setSelectedMode] = useState<GameMode>('quick');
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>('medium');
@@ -113,6 +119,26 @@ export const PhoneRemoteView: React.FC<PhoneRemoteViewProps> = ({
               Keep head & hands visible to phone camera
             </span>
           </div>
+
+          {/* Camera Permission Needed Overlay on Phone Remote */}
+          {!isCameraActive && (
+            <div className="absolute inset-0 bg-black/85 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-3 text-center">
+              <CameraOff className="w-6 h-6 sm:w-8 sm:h-8 text-rose-400 mb-1.5 animate-pulse" />
+              <span className="text-[11px] sm:text-xs font-arcade font-bold text-white mb-0.5">CAMERA ACCESS NEEDED</span>
+              <span className="text-[9px] sm:text-[10px] text-gray-300 mb-2.5 max-w-[220px]">
+                Camera stream is required to track poses for the TV.
+              </span>
+              {onRetryCamera && (
+                <button
+                  onClick={onRetryCamera}
+                  className="px-3 py-1.5 rounded-lg bg-pulse-cyan text-black font-arcade font-bold text-[10px] uppercase cursor-pointer hover:bg-cyan-300 active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Enable Camera</span>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Posture Badge Pill on Camera Feed */}
           <div className="absolute bottom-2 left-2 z-10 pointer-events-auto">

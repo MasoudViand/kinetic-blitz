@@ -55,6 +55,7 @@ export const App: React.FC = () => {
   const [detectedPosture, setDetectedPosture] = useState<PostureType>('uncalibrated');
   const [timeRemaining, setTimeRemaining] = useState<number>(60);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [cameraPermissionDenied, setCameraPermissionDenied] = useState<boolean>(false);
   const [isMockActive, setIsMockActive] = useState<boolean>(mockPoseProvider.enabled);
   const [stats, setStats] = useState<PlayerStats>(engineRef.current.stats);
 
@@ -182,11 +183,13 @@ export const App: React.FC = () => {
         poseService.startCamera(videoRef.current).then((ready) => {
           setIsCameraActive(ready);
           setIsMockActive(mockPoseProvider.enabled);
+          setCameraPermissionDenied(!ready && !mockPoseProvider.enabled);
         });
       }
     } else {
       poseService.stopCamera();
       setIsCameraActive(false);
+      setCameraPermissionDenied(false);
     }
   }, [isTvView, isTvConnected, gameState]);
 
@@ -387,10 +390,35 @@ export const App: React.FC = () => {
     engine.state = 'idle';
     setIsTutorial(false);
     setGameState('idle');
+    setCameraPermissionDenied(false);
   };
+
+  const handleRetryCamera = useCallback(() => {
+    setCameraPermissionDenied(false);
+    if (videoRef.current) {
+      poseService.startCamera(videoRef.current).then((ready) => {
+        setIsCameraActive(ready);
+        setIsMockActive(mockPoseProvider.enabled);
+        setCameraPermissionDenied(!ready && !mockPoseProvider.enabled);
+      });
+    }
+  }, []);
+
+  const handleUseSimulatedPose = useCallback(() => {
+    mockPoseProvider.enabled = true;
+    mockPoseProvider.isForced = true;
+    setIsMockActive(true);
+    setCameraPermissionDenied(false);
+    if (videoRef.current) {
+      poseService.startCamera(videoRef.current).then((ready) => {
+        setIsCameraActive(ready);
+      });
+    }
+  }, []);
 
   const handleEnableMock = () => {
     mockPoseProvider.enabled = !mockPoseProvider.enabled;
+    mockPoseProvider.isForced = mockPoseProvider.enabled;
     setIsMockActive(mockPoseProvider.enabled);
   };
 
@@ -422,6 +450,8 @@ export const App: React.FC = () => {
           }}
           tvState={tvState}
           onSendCommand={(cmd) => phoneCastSession.sendControlCommand(cmd)}
+          isCameraActive={isCameraActive}
+          onRetryCamera={handleRetryCamera}
         />
 
         {/* Dev Tools Drawer in DEV mode for autonomous bot / testing */}
@@ -475,10 +505,14 @@ export const App: React.FC = () => {
       {(gameState === 'calibrating' || gameState === 'countdown') && (
         <CalibrationOverlay
           isCameraReady={isCameraActive}
+          permissionDenied={cameraPermissionDenied}
           detectedPosture={detectedPosture}
           calibration={engineRef.current.calibration}
           onComplete={handleCalibrationComplete}
           onManualOverride={handleManualPostureOverride}
+          onRetryCamera={handleRetryCamera}
+          onExit={handleExitToMenu}
+          onUseSimulatedPose={handleUseSimulatedPose}
         />
       )}
 

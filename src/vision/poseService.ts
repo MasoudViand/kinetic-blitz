@@ -16,6 +16,7 @@ class PoseService {
   private isStartingCamera: boolean = false;
   private isModelLoading: boolean = false;
   public isCameraReady: boolean = false;
+  public cameraPermissionDenied: boolean = false;
   public errorMessage: string | null = null;
 
   public getStream(): MediaStream | null {
@@ -74,9 +75,10 @@ class PoseService {
     this.video = videoElement;
     this.errorMessage = null;
 
-    // If stream is already active, ensure loop is running and return
+    // 1. If physical stream is already active and working, reuse it without prompting
     if (this.stream && this.stream.active) {
       this.isCameraReady = true;
+      this.cameraPermissionDenied = false;
       this.startLoop();
       return true;
     }
@@ -84,9 +86,11 @@ class PoseService {
     if (this.isStartingCamera) return false;
     this.isStartingCamera = true;
 
-    // If mock mode is explicitly forced via URL or settings
-    if (mockPoseProvider.enabled) {
+    // 2. Only bypass camera if mock mode is explicitly forced (e.g. ?mock=true)
+    if (mockPoseProvider.isForced) {
+      mockPoseProvider.enabled = true;
       this.isCameraReady = true;
+      this.cameraPermissionDenied = false;
       this.isStartingCamera = false;
       this.startLoop();
       return true;
@@ -98,7 +102,7 @@ class PoseService {
         await this.preloadModel();
       }
 
-      // 2. Request Webcam Permission
+      // 2. Request Webcam Permission - asks every time camera is needed unless already granted
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
@@ -109,6 +113,7 @@ class PoseService {
       });
 
       this.stream = stream;
+      this.cameraPermissionDenied = false;
       if (this.video) {
         this.video.srcObject = stream;
         await new Promise<void>((resolve) => {
@@ -128,14 +133,13 @@ class PoseService {
       return true;
     } catch (err: unknown) {
       const errorStr = err instanceof Error ? err.message : String(err);
-      console.warn('[PoseService] Camera start error (switching to Mock Provider capability):', errorStr);
+      console.warn('[PoseService] Camera start error:', errorStr);
       this.errorMessage = errorStr;
       this.isStartingCamera = false;
-
-      // Auto-enable mock pose provider so the app remains fully functional without a camera!
-      mockPoseProvider.enabled = true;
-      this.isCameraReady = true;
-      this.startLoop();
+      this.isCameraReady = false;
+      this.cameraPermissionDenied = true;
+      // Do NOT permanently latch mockPoseProvider.enabled = true,
+      // so next time camera is needed it will prompt getUserMedia again!
       return false;
     }
   }

@@ -3,6 +3,7 @@ import { GameEngine } from '../engine/gameEngine';
 
 export class MockPoseProvider {
   public enabled: boolean = false;
+  public isForced: boolean = false;
   public simulatedPosture: PostureType = 'standing';
   public isPresent: boolean = true;
   public isBotActive: boolean = true;
@@ -25,6 +26,7 @@ export class MockPoseProvider {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('mock') === 'true') {
         this.enabled = true;
+        this.isForced = true;
       }
     }
   }
