@@ -15,6 +15,7 @@ import {
   Video,
   Sparkles,
   EyeOff,
+  Tv,
 } from 'lucide-react';
 import { HistoryModal } from './HistoryModal';
 import { WelcomeModal } from './WelcomeModal';
@@ -26,6 +27,10 @@ interface StartScreenProps {
   isMockActive: boolean;
   cameraMode: CameraMode;
   onSelectCameraMode: (mode: CameraMode) => void;
+  isTvConnected?: boolean;
+  tvConnectedCode?: string | null;
+  onOpenTvModal?: () => void;
+  onDisconnectTv?: () => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({
@@ -35,6 +40,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   isMockActive,
   cameraMode,
   onSelectCameraMode,
+  isTvConnected = false,
+  tvConnectedCode = null,
+  onOpenTvModal,
+  onDisconnectTv,
 }) => {
   const [selectedMode, setSelectedMode] = useState<GameMode>('quick');
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>('medium');
@@ -292,6 +301,38 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 Workout History & Stats
               </button>
             </div>
+
+            {/* Play on TV Button / Connected Status Pill */}
+            {isTvConnected ? (
+              <div className="flex items-center justify-between p-2.5 px-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs w-full">
+                <div className="flex items-center gap-2 text-emerald-400 font-arcade">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>CONNECTED TO TV: <strong className="font-mono">{tvConnectedCode}</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={onOpenTvModal}
+                    className="text-[11px] text-gray-300 hover:text-white underline cursor-pointer"
+                  >
+                    Details
+                  </button>
+                  <button
+                    onClick={onDisconnectTv}
+                    className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[10px] font-arcade font-bold cursor-pointer transition-all"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={onOpenTvModal}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-arcade font-semibold text-gray-200 transition-all flex items-center justify-center gap-2 hover:border-pulse-cyan cursor-pointer"
+              >
+                <Tv className="w-4 h-4 text-pulse-cyan" />
+                <span>Play on TV (Wireless Cast)</span>
+              </button>
+            )}
           </div>
 
           {/* Privacy & Mock Mode Links (Mock mode only in dev mode) */}

@@ -36,6 +36,11 @@
 - **Real-Time MET Formula**:
   $$\text{Calories Burned} = \frac{\text{Time (min)} \times \text{MET} \times 3.5 \times \text{Weight (70 kg)}}{200}$$
 
+### 📺 "Play on TV" Wireless Casting Mode
+- **Zero-Backend Peer-to-Peer Streaming**: Phone runs all pose tracking, gameplay physics, and Web Audio locally, streaming rendered visuals and sound directly to an Android TV / Smart TV browser (`/tv`) over local WebRTC.
+- **Instant QR & 4-Character Pairing**: Point your phone camera at the TV's QR code or type the 4-character room code to pair in seconds.
+- **TV-Optimized Experience**: Fullscreen display with high-contrast HUD overlays (Score, Combo, Countdown, Calories, and Summary), remote-friendly D-pad sound unmuting, and automatic screen wake-lock on phone.
+
 ### 📷 Visual & Privacy Display Modes
 1. **Webcam Mirror (`dimmed`)**: Live mirrored webcam video with cyber HUD and targeting reticles.
 2. **Neon Silhouette (`silhouette`)**: Privacy mode where the video is hidden, rendering a neon wireframe skeleton on a cyber grid.

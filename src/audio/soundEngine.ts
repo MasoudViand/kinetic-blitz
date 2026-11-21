@@ -3,6 +3,8 @@ class SoundEngine {
   private isMuted: boolean = false;
   private chargeOsc: OscillatorNode | null = null;
   private chargeGain: GainNode | null = null;
+  private mediaStreamDest: MediaStreamAudioDestinationNode | null = null;
+  private localGain: GainNode | null = null;
 
   constructor() {
     const saved = localStorage.getItem('kinetic_blitz_muted') ?? localStorage.getItem('kinetic_pulse_muted');
@@ -15,16 +17,48 @@ class SoundEngine {
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new AudioCtx();
+      this.localGain = this.ctx.createGain();
+      this.localGain.gain.setValueAtTime(this.isMuted ? 0 : 1, this.ctx.currentTime);
+      this.localGain.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
   }
 
+  /**
+   * Returns a MediaStream destination stream for WebRTC casting to TV.
+   * Synth SFX route cleanly into this stream while continuing to play locally
+   * (or muted on phone if desired).
+   */
+  public getAudioStream(): MediaStream | null {
+    this.initContext();
+    if (!this.ctx) return null;
+    if (!this.mediaStreamDest) {
+      this.mediaStreamDest = this.ctx.createMediaStreamDestination();
+    }
+    return this.mediaStreamDest.stream;
+  }
+
+  private connectOutput(node: AudioNode) {
+    if (!this.ctx) return;
+    if (this.localGain) {
+      node.connect(this.localGain);
+    } else {
+      node.connect(this.ctx.destination);
+    }
+    if (this.mediaStreamDest) {
+      node.connect(this.mediaStreamDest);
+    }
+  }
+
   public toggleMute(): boolean {
     this.isMuted = !this.isMuted;
     localStorage.setItem('kinetic_blitz_muted', String(this.isMuted));
-    if (this.isMuted && this.chargeGain) {
+    if (this.localGain && this.ctx) {
+      this.localGain.gain.setValueAtTime(this.isMuted ? 0 : 1, this.ctx.currentTime);
+    }
+    if (this.isMuted && this.chargeGain && !this.mediaStreamDest) {
       this.chargeGain.gain.setValueAtTime(0, this.ctx?.currentTime || 0);
     }
     return this.isMuted;
@@ -35,7 +69,7 @@ class SoundEngine {
   }
 
   public playCountdown(isFinal: boolean = false) {
-    if (this.isMuted) return;
+    if (this.isMuted && !this.mediaStreamDest) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -50,14 +84,14 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + (isFinal ? 0.4 : 0.18));
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectOutput(gain);
 
     osc.start(now);
     osc.stop(now + (isFinal ? 0.4 : 0.2));
   }
 
   public playPunch(isPower: boolean = false, combo: number = 1) {
-    if (this.isMuted) return;
+    if (this.isMuted && !this.mediaStreamDest) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -76,7 +110,7 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + (isPower ? 0.28 : 0.16));
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectOutput(gain);
 
     osc.start(now);
     osc.stop(now + (isPower ? 0.3 : 0.18));
@@ -96,13 +130,13 @@ class SoundEngine {
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + (isPower ? 0.08 : 0.04));
 
     noise.connect(noiseGain);
-    noiseGain.connect(this.ctx.destination);
+    this.connectOutput(noiseGain);
 
     noise.start(now);
   }
 
   public startSolarCharge(progress: number) {
-    if (this.isMuted) return;
+    if (this.isMuted && !this.mediaStreamDest) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -115,7 +149,7 @@ class SoundEngine {
       this.chargeGain.gain.setValueAtTime(0.01, now);
 
       this.chargeOsc.connect(this.chargeGain);
-      this.chargeGain.connect(this.ctx.destination);
+      this.connectOutput(this.chargeGain);
       this.chargeOsc.start(now);
     }
 
@@ -147,7 +181,7 @@ class SoundEngine {
 
   public playSolarBurst() {
     this.stopSolarCharge();
-    if (this.isMuted) return;
+    if (this.isMuted && !this.mediaStreamDest) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -164,7 +198,7 @@ class SoundEngine {
       gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.04 + 0.45);
 
       osc.connect(gain);
-      gain.connect(this.ctx!.destination);
+      this.connectOutput(gain);
 
       osc.start(now + idx * 0.04);
       osc.stop(now + idx * 0.04 + 0.5);
@@ -172,7 +206,7 @@ class SoundEngine {
   }
 
   public playLaserWarning() {
-    if (this.isMuted) return;
+    if (this.isMuted && !this.mediaStreamDest) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -187,14 +221,14 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectOutput(gain);
 
     osc.start(now);
     osc.stop(now + 0.18);
   }
 
   public playLaserHit() {
-    if (this.isMuted) return;
+    if (this.isMuted && !this.mediaStreamDest) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -209,14 +243,14 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectOutput(gain);
 
     osc.start(now);
     osc.stop(now + 0.3);
   }
 
   public playDodgeSuccess() {
-    if (this.isMuted) return;
+    if (this.isMuted && !this.mediaStreamDest) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -233,7 +267,7 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    this.connectOutput(gain);
 
     osc.start(now);
     osc.stop(now + 0.38);
