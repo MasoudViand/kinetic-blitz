@@ -17,7 +17,8 @@ import { DevToolbar } from './components/DevToolbar';
 
 import { TvReceiverView } from './tv/TvReceiverView';
 import { PlayOnTvModal } from './tv/PlayOnTvModal';
-import { phoneCastSession, sanitizeRoomCode, TvHudPayload } from './tv/tvCastService';
+import { PhoneRemoteView } from './tv/PhoneRemoteView';
+import { phoneCastSession, sanitizeRoomCode, TvStateUpdate } from './tv/tvCastService';
 import { Smartphone, X } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -66,6 +67,7 @@ export const App: React.FC = () => {
   const [isTvConnected, setIsTvConnected] = useState<boolean>(phoneCastSession.status === 'connected');
   const [tvConnectedCode, setTvConnectedCode] = useState<string | null>(phoneCastSession.connectedCode);
   const [showTvPlacementBanner, setShowTvPlacementBanner] = useState<boolean>(false);
+  const [tvState, setTvState] = useState<TvStateUpdate | null>(null);
 
   const landmarksRef = useRef<Landmark3D[] | null>(null);
 
@@ -89,16 +91,12 @@ export const App: React.FC = () => {
 
   // Connect / Disconnect TV handlers
   const handleConnectTv = useCallback(async (code: string) => {
-    if (!canvasRef.current) {
-      throw new Error('Game canvas is not ready.');
-    }
-    const audioStream = soundEngine.getAudioStream();
-    const success = await phoneCastSession.connectToTv(code, canvasRef.current, audioStream);
+    const success = await phoneCastSession.connectToTv(code);
     if (success) {
       setShowTvPlacementBanner(true);
       setTimeout(() => {
         setShowTvPlacementBanner(false);
-      }, 6000);
+      }, 5000);
     }
     return success;
   }, []);
@@ -107,14 +105,24 @@ export const App: React.FC = () => {
     phoneCastSession.disconnect();
   }, []);
 
-  // Sync TV connection status
+  // Sync TV connection status & telemetry
   useEffect(() => {
     phoneCastSession.onStatusChange = (status, code) => {
       setIsTvConnected(status === 'connected');
       setTvConnectedCode(code || null);
+      if (status !== 'connected') {
+        setTvState(null);
+      }
+    };
+    phoneCastSession.onStateUpdate = (update) => {
+      setTvState(update);
+      if (update.postureMode) {
+        setDetectedPosture(update.postureMode);
+      }
     };
     return () => {
       phoneCastSession.onStatusChange = undefined;
+      phoneCastSession.onStateUpdate = undefined;
     };
   }, []);
 
@@ -145,56 +153,6 @@ export const App: React.FC = () => {
     }
   }, [isTvView, handleConnectTv]);
 
-  // Sync HUD telemetry to TV via DataConnection (~10Hz or on state changes)
-  const sendTvHudSnapshot = useCallback(() => {
-    if (phoneCastSession.status !== 'connected') return;
-
-    const phase: TvHudPayload['phase'] =
-      gameState === 'idle'
-        ? 'menu'
-        : gameState === 'game_over'
-        ? 'summary'
-        : (gameState as TvHudPayload['phase']);
-
-    const totalHits = stats.pulseHits + stats.powerHits + stats.solarHolds + stats.lasersDodged;
-    const accuracy = stats.totalStrikesAttempted > 0
-      ? Math.round(((stats.pulseHits + stats.powerHits) / stats.totalStrikesAttempted) * 100)
-      : 0;
-
-    let rank = 'C';
-    if (stats.score > 12000) rank = 'S';
-    else if (stats.score > 8000) rank = 'A';
-    else if (stats.score > 4000) rank = 'B';
-
-    const payload: TvHudPayload = {
-      phase,
-      score: stats.score,
-      combo: stats.combo,
-      maxCombo: stats.maxCombo,
-      timeLeft: Math.max(0, Math.floor(timeRemaining)),
-      overdriveActive: stats.combo >= 10,
-      postureMode: detectedPosture || engineRef.current.calibration.posture,
-      calibrationCountdown: gameState === 'countdown' ? 5 : 0,
-      calories: Math.round(stats.caloriesBurned),
-      rank,
-      accuracy,
-      totalHits,
-      difficulty,
-      mode: gameMode,
-    };
-
-    phoneCastSession.sendHudUpdate(payload);
-  }, [gameState, stats, timeRemaining, detectedPosture, difficulty, gameMode]);
-
-  useEffect(() => {
-    if (!isTvConnected) return;
-
-    sendTvHudSnapshot();
-    const interval = setInterval(sendTvHudSnapshot, 100);
-
-    return () => clearInterval(interval);
-  }, [isTvConnected, sendTvHudSnapshot]);
-
   // Initialize camera & pose service (Only on phone/desktop, never on TV)
   useEffect(() => {
     if (isTvView) return;
@@ -207,6 +165,16 @@ export const App: React.FC = () => {
 
     const unsubscribe = poseService.subscribe((landmarks) => {
       landmarksRef.current = landmarks;
+
+      // When casting to TV in Low-Latency Pose Sensor Mode: stream landmarks to TV and skip local game logic
+      if (phoneCastSession.status === 'connected') {
+        phoneCastSession.sendPosePacket(landmarks);
+        if (landmarks) {
+          const posture = postureDetector.classifyPosture(landmarks);
+          setDetectedPosture(posture);
+        }
+        return;
+      }
 
       const engine = engineRef.current;
       const now = performance.now();
@@ -241,6 +209,11 @@ export const App: React.FC = () => {
     let animId: number;
 
     const renderLoop = (time: number) => {
+      if (phoneCastSession.status === 'connected') {
+        // Skip canvas rendering on phone when casting to TV to save CPU/battery
+        animId = requestAnimationFrame(renderLoop);
+        return;
+      }
       const canvas = canvasRef.current;
       const engine = engineRef.current;
       const landmarks = landmarksRef.current;
@@ -395,7 +368,43 @@ export const App: React.FC = () => {
     return <TvReceiverView />;
   }
 
-  // PLAYER / PHONE VIEW ROUTE
+  // PHONE REMOTE VIEW (When paired to TV as low-latency pose sensor & remote)
+  if (isTvConnected && tvConnectedCode) {
+    return (
+      <div className="relative w-full h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#070b12] select-none">
+        {/* Underlying video element keeping camera feed running continuously for MediaPipe */}
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          className="fixed opacity-0 pointer-events-none -z-50 w-1 h-1"
+        />
+
+        <PhoneRemoteView
+          roomCode={tvConnectedCode}
+          onDisconnect={handleDisconnectTv}
+          detectedPosture={detectedPosture}
+          onTogglePosture={() => {
+            const next = detectedPosture === 'standing' ? 'seated' : 'standing';
+            setDetectedPosture(next);
+            phoneCastSession.sendControlCommand({ type: 'SET_POSTURE', posture: next });
+          }}
+          tvState={tvState}
+          onSendCommand={(cmd) => phoneCastSession.sendControlCommand(cmd)}
+        />
+
+        {/* Dev Tools Drawer in DEV mode for autonomous bot / testing */}
+        {import.meta.env.DEV && (
+          <DevToolbar onPostureChanged={(p) => {
+            setDetectedPosture(p);
+            phoneCastSession.sendControlCommand({ type: 'SET_POSTURE', posture: p });
+          }} />
+        )}
+      </div>
+    );
+  }
+
+  // PLAYER / PHONE STANDALONE VIEW ROUTE
   return (
     <div className="relative w-full h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#0a0e17] flex items-center justify-center select-none">
       {/* 1. Underlying Mirrored Webcam Video Element */}

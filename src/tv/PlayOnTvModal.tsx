@@ -121,7 +121,7 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
               CONNECTED TO TV
             </h3>
             <p className="text-[11px] sm:text-xs text-gray-300 mt-1 mb-2.5 sm:mb-3">
-              Streaming game video & audio to room <span className="text-pulse-cyan font-mono font-bold">{connectedCode}</span>
+              Streaming low-latency pose landmarks to TV room <span className="text-pulse-cyan font-mono font-bold">{connectedCode}</span>
             </p>
 
             {/* Landscape placement tip */}

@@ -3,7 +3,6 @@ class SoundEngine {
   private isMuted: boolean = false;
   private chargeOsc: OscillatorNode | null = null;
   private chargeGain: GainNode | null = null;
-  private mediaStreamDest: MediaStreamAudioDestinationNode | null = null;
   private localGain: GainNode | null = null;
 
   constructor() {
@@ -11,6 +10,10 @@ class SoundEngine {
     if (saved !== null) {
       this.isMuted = saved === 'true';
     }
+  }
+
+  public enableAudio() {
+    this.initContext();
   }
 
   private initContext() {
@@ -26,29 +29,12 @@ class SoundEngine {
     }
   }
 
-  /**
-   * Returns a MediaStream destination stream for WebRTC casting to TV.
-   * Synth SFX route cleanly into this stream while continuing to play locally
-   * (or muted on phone if desired).
-   */
-  public getAudioStream(): MediaStream | null {
-    this.initContext();
-    if (!this.ctx) return null;
-    if (!this.mediaStreamDest) {
-      this.mediaStreamDest = this.ctx.createMediaStreamDestination();
-    }
-    return this.mediaStreamDest.stream;
-  }
-
   private connectOutput(node: AudioNode) {
     if (!this.ctx) return;
     if (this.localGain) {
       node.connect(this.localGain);
     } else {
       node.connect(this.ctx.destination);
-    }
-    if (this.mediaStreamDest) {
-      node.connect(this.mediaStreamDest);
     }
   }
 
@@ -58,7 +44,7 @@ class SoundEngine {
     if (this.localGain && this.ctx) {
       this.localGain.gain.setValueAtTime(this.isMuted ? 0 : 1, this.ctx.currentTime);
     }
-    if (this.isMuted && this.chargeGain && !this.mediaStreamDest) {
+    if (this.isMuted && this.chargeGain) {
       this.chargeGain.gain.setValueAtTime(0, this.ctx?.currentTime || 0);
     }
     return this.isMuted;
@@ -69,7 +55,7 @@ class SoundEngine {
   }
 
   public playCountdown(isFinal: boolean = false) {
-    if (this.isMuted && !this.mediaStreamDest) return;
+    if (this.isMuted) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -91,7 +77,7 @@ class SoundEngine {
   }
 
   public playPunch(isPower: boolean = false, combo: number = 1) {
-    if (this.isMuted && !this.mediaStreamDest) return;
+    if (this.isMuted) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -136,7 +122,7 @@ class SoundEngine {
   }
 
   public startSolarCharge(progress: number) {
-    if (this.isMuted && !this.mediaStreamDest) return;
+    if (this.isMuted) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -181,7 +167,7 @@ class SoundEngine {
 
   public playSolarBurst() {
     this.stopSolarCharge();
-    if (this.isMuted && !this.mediaStreamDest) return;
+    if (this.isMuted) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -206,7 +192,7 @@ class SoundEngine {
   }
 
   public playLaserWarning() {
-    if (this.isMuted && !this.mediaStreamDest) return;
+    if (this.isMuted) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -228,7 +214,7 @@ class SoundEngine {
   }
 
   public playLaserHit() {
-    if (this.isMuted && !this.mediaStreamDest) return;
+    if (this.isMuted) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -250,7 +236,7 @@ class SoundEngine {
   }
 
   public playDodgeSuccess() {
-    if (this.isMuted && !this.mediaStreamDest) return;
+    if (this.isMuted) return;
     this.initContext();
     if (!this.ctx) return;
 

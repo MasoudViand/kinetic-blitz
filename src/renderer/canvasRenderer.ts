@@ -8,6 +8,18 @@ import { GameEngine } from '../engine/gameEngine';
 import { getFistPosition } from '../vision/handTracking';
 
 export class CanvasRenderer {
+  public lowPowerMode: boolean = false;
+  private slowFrameStreak: number = 0;
+
+  private applyShadow(ctx: CanvasRenderingContext2D, color: string, blur: number) {
+    if (this.lowPowerMode || blur <= 0) {
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = blur;
+    }
+  }
+
   public render(
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -17,6 +29,7 @@ export class CanvasRenderer {
     cameraMode: CameraMode,
     isCalibrating: boolean
   ) {
+    const startTime = performance.now();
     ctx.save();
 
     // 1. Clear & Screen Shake
@@ -57,6 +70,17 @@ export class CanvasRenderer {
     engine.particles.render(ctx);
 
     ctx.restore();
+
+    // Performance monitor for TV chips: auto-downgrade shadow effects if render time exceeds 18ms
+    const renderDuration = performance.now() - startTime;
+    if (renderDuration > 18) {
+      this.slowFrameStreak++;
+      if (this.slowFrameStreak > 8) {
+        this.lowPowerMode = true;
+      }
+    } else {
+      this.slowFrameStreak = Math.max(0, this.slowFrameStreak - 1);
+    }
   }
 
   private drawCyberGrid(ctx: CanvasRenderingContext2D, width: number, height: number) {
@@ -90,8 +114,7 @@ export class CanvasRenderer {
     const color = isCalibrating ? 'rgba(0, 243, 255, 0.8)' : 'rgba(56, 189, 248, 0.45)';
     ctx.strokeStyle = color;
     ctx.lineWidth = isCalibrating ? 3 : 2;
-    ctx.shadowColor = '#00f3ff';
-    ctx.shadowBlur = isCalibrating ? 15 : 8;
+    this.applyShadow(ctx, '#00f3ff', isCalibrating ? 15 : 8);
 
     // Body connections
     const bones: [number, number][] = [
@@ -153,8 +176,7 @@ export class CanvasRenderer {
 
       ctx.strokeStyle = isHitWindow ? '#ffffff' : orb.color;
       ctx.lineWidth = isHitWindow ? 3.5 : 2;
-      ctx.shadowColor = isHitWindow ? '#ffffff' : orb.color;
-      ctx.shadowBlur = isHitWindow ? 16 : 8;
+      this.applyShadow(ctx, isHitWindow ? '#ffffff' : orb.color, isHitWindow ? 16 : 8);
 
       ctx.beginPath();
       ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
@@ -167,8 +189,7 @@ export class CanvasRenderer {
       grad.addColorStop(1, `${orb.color}22`);
 
       ctx.fillStyle = grad;
-      ctx.shadowColor = orb.color;
-      ctx.shadowBlur = 18;
+      this.applyShadow(ctx, orb.color, 18);
       ctx.beginPath();
       ctx.arc(x, y, currentRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -213,8 +234,7 @@ export class CanvasRenderer {
       grad.addColorStop(1, 'rgba(245, 158, 11, 0.1)');
 
       ctx.fillStyle = grad;
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 24;
+      this.applyShadow(ctx, '#ffd700', 24);
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -224,8 +244,7 @@ export class CanvasRenderer {
       if (progress > 0) {
         ctx.strokeStyle = '#39ff14';
         ctx.lineWidth = 6;
-        ctx.shadowColor = '#39ff14';
-        ctx.shadowBlur = 15;
+        this.applyShadow(ctx, '#39ff14', 15);
         ctx.beginPath();
         ctx.arc(x, y, r + 8, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
         ctx.stroke();
@@ -242,8 +261,7 @@ export class CanvasRenderer {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = '#000000';
-      ctx.shadowBlur = 4;
+      this.applyShadow(ctx, '#000000', 4);
       ctx.fillText(progress > 0 ? `${Math.round(progress * 100)}%` : 'HOLD', x, y);
 
       ctx.restore();
@@ -274,8 +292,7 @@ export class CanvasRenderer {
           ctx.font = `bold ${Math.round(squatFontSize)}px Orbitron, sans-serif`;
           ctx.fillStyle = '#ff1a40';
           ctx.textAlign = 'center';
-          ctx.shadowColor = '#ff1a40';
-          ctx.shadowBlur = 15;
+          this.applyShadow(ctx, '#ff1a40', 15);
           ctx.fillText('⚠ SQUAT / DUCK NOW! ⚠', width * 0.5, squatY * 0.5);
         } else if (isActive) {
           // Active Laser Wall
@@ -285,8 +302,7 @@ export class CanvasRenderer {
           // Intense Laser Beam Line
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 6;
-          ctx.shadowColor = '#ff1a40';
-          ctx.shadowBlur = 25;
+          this.applyShadow(ctx, '#ff1a40', 25);
           ctx.beginPath();
           ctx.moveTo(0, squatY);
           ctx.lineTo(width, squatY);
@@ -308,8 +324,7 @@ export class CanvasRenderer {
           ctx.font = `bold ${Math.round(leanFontSize)}px Orbitron, sans-serif`;
           ctx.fillStyle = '#ff1a40';
           ctx.textAlign = 'center';
-          ctx.shadowColor = '#ff1a40';
-          ctx.shadowBlur = 15;
+          this.applyShadow(ctx, '#ff1a40', 15);
           ctx.fillText(directionText, textX, height * 0.45);
         } else if (isActive) {
           ctx.fillStyle = 'rgba(255, 26, 64, 0.65)';
@@ -318,8 +333,7 @@ export class CanvasRenderer {
           const beamX = isLeft ? width * 0.5 : width * 0.5;
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 6;
-          ctx.shadowColor = '#ff1a40';
-          ctx.shadowBlur = 25;
+          this.applyShadow(ctx, '#ff1a40', 25);
           ctx.beginPath();
           ctx.moveTo(beamX, 0);
           ctx.lineTo(beamX, height);
@@ -358,8 +372,7 @@ export class CanvasRenderer {
 
       ctx.strokeStyle = isFast ? '#ffffff' : color;
       ctx.lineWidth = (isFast ? 5.0 : 3.5) * reticleScale;
-      ctx.shadowColor = isFast ? '#ffffff' : color;
-      ctx.shadowBlur = (isFast ? 24 : 14) * reticleScale;
+      this.applyShadow(ctx, isFast ? '#ffffff' : color, (isFast ? 24 : 14) * reticleScale);
 
       ctx.beginPath();
       ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);

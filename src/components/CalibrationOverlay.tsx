@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { PostureType, CalibrationData } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 import { CheckCircle2, User, Armchair, RefreshCw } from 'lucide-react';
@@ -17,6 +17,10 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
 }) => {
   const [countdown, setCountdown] = useState<number>(5);
   const [currentPosture, setCurrentPosture] = useState<PostureType>(detectedPosture === 'uncalibrated' ? 'standing' : detectedPosture);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const currentPostureRef = useRef(currentPosture);
+  currentPostureRef.current = currentPosture;
 
   useEffect(() => {
     if (detectedPosture !== 'uncalibrated') {
@@ -31,7 +35,7 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
         if (prev <= 1) {
           clearInterval(interval);
           soundEngine.playCountdown(true);
-          onComplete(currentPosture);
+          onCompleteRef.current(currentPostureRef.current);
           return 0;
         }
         soundEngine.playCountdown(false);
@@ -40,7 +44,7 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentPosture, onComplete]);
+  }, []);
 
   const togglePosture = () => {
     const next = currentPosture === 'standing' ? 'seated' : 'standing';

@@ -1,22 +1,41 @@
-import Peer, { MediaConnection, DataConnection } from 'peerjs';
+import Peer, { DataConnection } from 'peerjs';
+import { GameMode, GameState, DifficultyLevel, PostureType, Landmark3D } from '../types/game';
+import { CompactPosePacket, STREAMED_LANDMARK_IDS, remotePoseProvider } from '../vision/remotePoseProvider';
 
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-export interface TvHudPayload {
-  phase: 'menu' | 'calibrating' | 'countdown' | 'playing' | 'paused' | 'tutorial' | 'summary';
+export type TvControlCommand =
+  | { type: 'START_GAME'; mode: GameMode; difficulty: DifficultyLevel }
+  | { type: 'PAUSE' }
+  | { type: 'RESUME' }
+  | { type: 'RESTART' }
+  | { type: 'EXIT_TO_MENU' }
+  | { type: 'SET_POSTURE'; posture: PostureType }
+  | { type: 'RECALIBRATE' }
+  | { type: 'START_TUTORIAL' }
+  | { type: 'SKIP_TUTORIAL' };
+
+export interface TvStateUpdate {
+  phase: GameState;
   score: number;
   combo: number;
   maxCombo: number;
-  timeLeft: number;
-  overdriveActive: boolean;
-  postureMode: string;
-  calibrationCountdown: number;
-  calories: number;
-  rank?: string;
-  accuracy?: number;
-  totalHits?: number;
-  difficulty?: string;
-  mode?: string;
+  timeRemaining: number;
+  caloriesBurned: number;
+  postureMode: PostureType;
+  difficulty: DifficultyLevel;
+  mode: GameMode;
+  isPresent: boolean;
+  tvFps?: number;
+  summary?: {
+    score: number;
+    rank: string;
+    pulseHits: number;
+    solarHolds: number;
+    lasersDodged: number;
+    maxCombo: number;
+    caloriesBurned: number;
+  };
 }
 
 export type CastConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -52,18 +71,17 @@ interface WakeLockSentinelLike {
 }
 
 /**
- * TV Host Controller: Registers kb-tv-${CODE} and accepts incoming calls & data connections.
+ * TV Host Controller: Registers kb-tv-${CODE} and accepts incoming Pose and Control DataConnections.
  */
 export class TvReceiverSession {
   private peer: Peer | null = null;
-  private currentCall: MediaConnection | null = null;
-  private currentConn: DataConnection | null = null;
+  private poseConn: DataConnection | null = null;
+  private controlConn: DataConnection | null = null;
   public roomCode: string;
 
-  public onStreamReceived?: (stream: MediaStream) => void;
-  public onHudUpdateReceived?: (payload: TvHudPayload) => void;
   public onClientConnected?: () => void;
   public onClientDisconnected?: () => void;
+  public onControlCommandReceived?: (cmd: TvControlCommand) => void;
   public onError?: (err: Error) => void;
 
   constructor(initialCode?: string) {
@@ -84,52 +102,46 @@ export class TvReceiverSession {
       onReady?.(this.roomCode);
     });
 
-    peer.on('call', (call) => {
-      console.log('[TvReceiver] Incoming media call from phone');
-      this.currentCall = call;
-
-      // Critical: Answer with NO stream parameters so camera-less TV never triggers getUserMedia
-      call.answer();
-
-      call.on('stream', (remoteStream) => {
-        console.log('[TvReceiver] Media stream received on TV');
-        this.onStreamReceived?.(remoteStream);
-        this.onClientConnected?.();
-      });
-
-      call.on('close', () => {
-        console.log('[TvReceiver] Media call closed');
-        this.onClientDisconnected?.();
-      });
-
-      call.on('error', (err) => {
-        console.warn('[TvReceiver] Call error:', err);
-        this.onClientDisconnected?.();
-      });
-    });
-
     peer.on('connection', (conn) => {
-      console.log('[TvReceiver] Incoming DataConnection from phone');
-      this.currentConn = conn;
+      console.log(`[TvReceiver] Incoming DataConnection (${conn.label || 'unlabeled'})`);
 
       conn.on('open', () => {
-        console.log('[TvReceiver] DataConnection open');
+        console.log(`[TvReceiver] DataConnection ${conn.label} opened`);
+        if (conn.label === 'pose') {
+          this.poseConn = conn;
+        } else {
+          this.controlConn = conn;
+        }
         this.onClientConnected?.();
       });
 
       conn.on('data', (data) => {
-        if (data && typeof data === 'object') {
-          this.onHudUpdateReceived?.(data as TvHudPayload);
+        if (!data || typeof data !== 'object') return;
+
+        // Route pose packets
+        if ('seq' in data && 'lm' in data) {
+          remotePoseProvider.onPacketReceived(data as CompactPosePacket);
+          return;
+        }
+
+        // Route control commands
+        if ('type' in data) {
+          this.onControlCommandReceived?.(data as TvControlCommand);
         }
       });
 
       conn.on('close', () => {
-        console.log('[TvReceiver] DataConnection closed');
-        this.onClientDisconnected?.();
+        console.log(`[TvReceiver] DataConnection ${conn.label} closed`);
+        if (conn === this.controlConn) {
+          this.controlConn = null;
+          this.onClientDisconnected?.();
+        } else if (conn === this.poseConn) {
+          this.poseConn = null;
+        }
       });
 
       conn.on('error', (err) => {
-        console.warn('[TvReceiver] Data connection error:', err);
+        console.warn(`[TvReceiver] DataConnection ${conn.label} error:`, err);
       });
     });
 
@@ -145,38 +157,53 @@ export class TvReceiverSession {
     });
   }
 
+  /**
+   * Broadcast lightweight game state update back to the phone.
+   */
+  public sendStateUpdate(update: TvStateUpdate) {
+    if (this.controlConn && this.controlConn.open) {
+      try {
+        this.controlConn.send(update);
+      } catch {
+        // Non-blocking
+      }
+    }
+  }
+
   public destroy() {
     try {
-      this.currentCall?.close();
-      this.currentConn?.close();
+      this.poseConn?.close();
+      this.controlConn?.close();
       this.peer?.destroy();
     } catch {
       // Ignore
     }
-    this.currentCall = null;
-    this.currentConn = null;
+    this.poseConn = null;
+    this.controlConn = null;
     this.peer = null;
+    remotePoseProvider.reset();
   }
 }
 
 /**
- * Phone Sender Controller: Captures canvas + audio, calls the TV, and syncs HUD telemetry.
+ * Phone Sender Controller:
+ * Streams compact Pose JSON over an unreliable/unordered DataConnection
+ * and sends game commands over a reliable DataConnection.
  */
 export class PhoneSenderSession {
   private peer: Peer | null = null;
-  private call: MediaConnection | null = null;
-  private conn: DataConnection | null = null;
-  private combinedStream: MediaStream | null = null;
+  private poseConn: DataConnection | null = null;
+  private controlConn: DataConnection | null = null;
   private wakeLock: WakeLockSentinelLike | null = null;
+  private seq: number = 0;
+
   public status: CastConnectionStatus = 'disconnected';
   public connectedCode: string | null = null;
 
   public onStatusChange?: (status: CastConnectionStatus, code?: string) => void;
+  public onStateUpdate?: (update: TvStateUpdate) => void;
   public onError?: (err: Error) => void;
 
-  /**
-   * Acquire a screen wake lock so the phone screen doesn't dim or turn off during the workout.
-   */
   private async acquireWakeLock() {
     try {
       if ('wakeLock' in navigator && (navigator as unknown as { wakeLock: { request: (type: string) => Promise<WakeLockSentinelLike> } }).wakeLock) {
@@ -197,11 +224,7 @@ export class PhoneSenderSession {
     }
   }
 
-  public async connectToTv(
-    code: string,
-    canvas: HTMLCanvasElement,
-    audioStream: MediaStream | null
-  ): Promise<boolean> {
+  public async connectToTv(code: string): Promise<boolean> {
     const cleanCode = sanitizeRoomCode(code);
     if (cleanCode.length !== 4) {
       throw new Error('Please enter a valid 4-character TV code.');
@@ -221,7 +244,7 @@ export class PhoneSenderSession {
         const timeoutId = setTimeout(() => {
           if (this.status !== 'connected') {
             this.disconnect();
-            const timeoutErr = new Error('Connection to TV timed out. Please check the code.');
+            const timeoutErr = new Error('Connection to TV timed out. Please check the room code.');
             this.onError?.(timeoutErr);
             reject(timeoutErr);
           }
@@ -231,53 +254,22 @@ export class PhoneSenderSession {
           const targetPeerId = getPeerIdForCode(cleanCode);
           console.log('[PhoneSender] Connecting to TV host:', targetPeerId);
 
-          // 1. Capture canvas stream at 60 FPS
-          const canvasStream = (canvas as HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream }).captureStream
-            ? (canvas as HTMLCanvasElement & { captureStream: (fps: number) => MediaStream }).captureStream(60)
-            : null;
-
-          if (!canvasStream) {
-            clearTimeout(timeoutId);
-            const err = new Error('Canvas streaming is not supported in this browser.');
-            this.status = 'error';
-            this.onStatusChange?.('error');
-            reject(err);
-            return;
-          }
-
-          // 2. Combine video tracks with audio stream tracks
-          const tracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
-          if (audioStream) {
-            tracks.push(...audioStream.getAudioTracks());
-          }
-          const combined = new MediaStream(tracks);
-          this.combinedStream = combined;
-
-          // 3. Initiate Media Call
-          const call = peer.call(targetPeerId, combined);
-          this.call = call;
-
-          // Configure outbound video encoding guardrails (cap at 1280x720, maintain framerate)
-          this.configureSenderParameters(call, canvas);
-
-          call.on('close', () => {
-            console.log('[PhoneSender] Call closed');
-            this.disconnect();
+          // 1. Reliable Control Channel (Commands & Telemetry)
+          const control = peer.connect(targetPeerId, {
+            label: 'control',
+            reliable: true,
           });
+          this.controlConn = control;
 
-          call.on('error', (err) => {
-            console.warn('[PhoneSender] Call error:', err);
-            clearTimeout(timeoutId);
-            this.disconnect();
-            reject(err);
+          // 2. Unreliable, Unordered UDP-Style Pose Channel (Drops stale frames instead of lag spikes)
+          const pose = peer.connect(targetPeerId, {
+            label: 'pose',
+            reliable: false,
           });
+          this.poseConn = pose;
 
-          // 4. Initiate Data Connection for HUD telemetry
-          const conn = peer.connect(targetPeerId, { reliable: true });
-          this.conn = conn;
-
-          conn.on('open', () => {
-            console.log('[PhoneSender] DataConnection opened to TV');
+          control.on('open', () => {
+            console.log('[PhoneSender] Control DataConnection opened');
             clearTimeout(timeoutId);
             this.status = 'connected';
             this.connectedCode = cleanCode;
@@ -286,13 +278,23 @@ export class PhoneSenderSession {
             resolve(true);
           });
 
-          conn.on('close', () => {
-            console.log('[PhoneSender] DataConnection closed');
+          control.on('data', (data) => {
+            if (data && typeof data === 'object') {
+              this.onStateUpdate?.(data as TvStateUpdate);
+            }
+          });
+
+          control.on('close', () => {
+            console.log('[PhoneSender] Control DataConnection closed');
             this.disconnect();
           });
 
-          conn.on('error', (err) => {
-            console.warn('[PhoneSender] DataConnection error:', err);
+          control.on('error', (err) => {
+            console.warn('[PhoneSender] Control channel error:', err);
+          });
+
+          pose.on('error', (err) => {
+            console.warn('[PhoneSender] Pose channel error:', err);
           });
         });
 
@@ -312,46 +314,67 @@ export class PhoneSenderSession {
     });
   }
 
-  private configureSenderParameters(call: MediaConnection, canvas: HTMLCanvasElement) {
-    const applyParams = () => {
-      try {
-        const pc = (call as unknown as { peerConnection?: RTCPeerConnection }).peerConnection;
-        if (!pc) return;
+  /**
+   * Encodes and transmits the 13-17 key pose landmarks to the TV over the pose channel.
+   * Skips transmission if the buffer has queued data (> 4KB) to prevent network lag on spotty Wi-Fi.
+   */
+  public sendPosePacket(landmarks: Landmark3D[] | null) {
+    if (!this.poseConn || !this.poseConn.open) return;
 
-        pc.getSenders().forEach((sender) => {
-          if (sender.track?.kind === 'video') {
-            try {
-              const params = sender.getParameters();
-              if (!params.encodings || params.encodings.length === 0) {
-                params.encodings = [{}];
-              }
-              const maxDim = Math.max(canvas.width || 1280, canvas.height || 720);
-              if (maxDim > 1280) {
-                params.encodings[0].scaleResolutionDownBy = maxDim / 1280;
-              }
-              // Set degradationPreference to maintain-framerate for low latency workout rhythm
-              (params as unknown as { degradationPreference?: string }).degradationPreference = 'maintain-framerate';
-              params.encodings[0].maxBitrate = 2500000; // 2.5 Mbps
-              sender.setParameters(params).catch(() => {});
-            } catch {
-              // Ignore
-            }
-          }
-        });
+    // Check backpressure buffer to avoid piling up late frames
+    const rtcChannel = (this.poseConn as unknown as { dataChannel?: RTCDataChannel }).dataChannel;
+    if (rtcChannel && rtcChannel.bufferedAmount > 4096) {
+      return; // Skip this frame cleanly
+    }
+
+    if (!landmarks) {
+      // Send absent notification
+      const absentPacket: CompactPosePacket = {
+        seq: ++this.seq,
+        t: Date.now(),
+        lm: {},
+        absent: true,
+      };
+      try {
+        this.poseConn.send(absentPacket);
       } catch {
-        // Ignore
+        // Non-blocking
       }
+      return;
+    }
+
+    const lmDict: CompactPosePacket['lm'] = {};
+    for (const id of STREAMED_LANDMARK_IDS) {
+      const point = landmarks[id];
+      if (point) {
+        lmDict[id] = [
+          Math.round(point.x * 1000) / 1000,
+          Math.round(point.y * 1000) / 1000,
+          Math.round((point.visibility ?? 1) * 1000) / 1000,
+        ];
+      }
+    }
+
+    const packet: CompactPosePacket = {
+      seq: ++this.seq,
+      t: Date.now(),
+      lm: lmDict,
     };
 
-    // Attempt immediately and after brief negotiation window
-    setTimeout(applyParams, 100);
-    setTimeout(applyParams, 800);
+    try {
+      this.poseConn.send(packet);
+    } catch {
+      // Non-blocking
+    }
   }
 
-  public sendHudUpdate(payload: TvHudPayload) {
-    if (this.conn && this.conn.open) {
+  /**
+   * Sends reliable command to TV.
+   */
+  public sendControlCommand(cmd: TvControlCommand) {
+    if (this.controlConn && this.controlConn.open) {
       try {
-        this.conn.send(payload);
+        this.controlConn.send(cmd);
       } catch {
         // Non-blocking
       }
@@ -361,21 +384,16 @@ export class PhoneSenderSession {
   public disconnect() {
     this.releaseWakeLock();
 
-    if (this.combinedStream) {
-      this.combinedStream.getTracks().forEach((t) => t.stop());
-      this.combinedStream = null;
-    }
-
     try {
-      this.call?.close();
-      this.conn?.close();
+      this.poseConn?.close();
+      this.controlConn?.close();
       this.peer?.destroy();
     } catch {
       // Ignore
     }
 
-    this.call = null;
-    this.conn = null;
+    this.poseConn = null;
+    this.controlConn = null;
     this.peer = null;
     const wasConnected = this.status === 'connected';
     this.status = 'disconnected';

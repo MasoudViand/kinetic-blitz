@@ -43,8 +43,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onExit,
 }) => {
   const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
+    if (!Number.isFinite(secs) || secs < 0) return '0:00';
+    const totalSecs = Math.max(0, Math.floor(secs));
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 

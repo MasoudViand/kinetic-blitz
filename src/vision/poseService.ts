@@ -17,6 +17,10 @@ class PoseService {
   public isCameraReady: boolean = false;
   public errorMessage: string | null = null;
 
+  public getStream(): MediaStream | null {
+    return this.stream;
+  }
+
   public subscribe(cb: PoseCallback): () => void {
     this.callbacks.add(cb);
     return () => this.callbacks.delete(cb);

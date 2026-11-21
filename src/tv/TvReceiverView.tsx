@@ -2,38 +2,290 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import QRCode from 'react-qr-code';
 import {
   TvReceiverSession,
-  TvHudPayload,
   generateRoomCode,
+  TvControlCommand,
+  TvStateUpdate,
 } from './tvCastService';
+import { remotePoseProvider } from '../vision/remotePoseProvider';
+import { GameEngine } from '../engine/gameEngine';
+import { canvasRenderer } from '../renderer/canvasRenderer';
+import { postureDetector } from '../vision/postureDetector';
+import { soundEngine } from '../audio/soundEngine';
+import { getFistPosition } from '../vision/handTracking';
+import { GameMode, GameState, DifficultyLevel, PostureType, TutorialStep, PlayerStats, Landmark3D, Point2D } from '../types/game';
+
+import { CalibrationOverlay } from '../components/CalibrationOverlay';
+import { SummaryModal } from '../components/SummaryModal';
+import { TutorialOverlay } from '../components/TutorialOverlay';
+
 import {
   Tv,
   Volume2,
-  VolumeX,
   Smartphone,
-  Sparkles,
   ShieldCheck,
-  Flame,
-  Trophy,
   Maximize2,
   RefreshCw,
+  Flame,
 } from 'lucide-react';
 
 export const TvReceiverView: React.FC = () => {
   const [roomCode, setRoomCode] = useState<string>(() => generateRoomCode());
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
-  const [hudData, setHudData] = useState<TvHudPayload | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const engineRef = useRef<GameEngine>(new GameEngine());
   const sessionRef = useRef<TvReceiverSession | null>(null);
   const soundButtonRef = useRef<HTMLButtonElement | null>(null);
+  const landmarksRef = useRef<Landmark3D[] | null>(null);
+
+  // Local TV Game States
+  const [gameState, setGameState] = useState<GameState>('idle');
+  const [gameMode, setGameMode] = useState<GameMode>('quick');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>('medium');
+  const [detectedPosture, setDetectedPosture] = useState<PostureType>('standing');
+  const [timeRemaining, setTimeRemaining] = useState<number>(60);
+  const [stats, setStats] = useState<PlayerStats>(engineRef.current.stats);
+
+  const [isTutorial, setIsTutorial] = useState<boolean>(false);
+  const [tutorialStep, setTutorialStep] = useState<TutorialStep>('intro');
+  const [tutorialCount, setTutorialCount] = useState<number>(0);
 
   const qrUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname.replace(/\/tv\/?$/, '')}/?tv=${roomCode}`
     : '';
 
+  // Unlock sound via interaction (TV remote or touch)
+  const handleEnableSound = useCallback(() => {
+    soundEngine.enableAudio();
+    setSoundEnabled(true);
+  }, []);
+
+  // Listen to remote TV OK/Enter key or Space to unlock sound or resume
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.keyCode === 13) {
+        if (!soundEnabled) {
+          handleEnableSound();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [soundEnabled, handleEnableSound]);
+
+  // Synchronize engine state callbacks
+  useEffect(() => {
+    const engine = engineRef.current;
+    engine.onStateChange = (newState) => {
+      setGameState(newState);
+    };
+    engine.onStatsUpdate = (newStats) => {
+      setStats({ ...newStats });
+      setTimeRemaining(engine.timeRemaining);
+    };
+    engine.onTutorialStepChange = (step, count) => {
+      setTutorialStep(step);
+      setTutorialCount(count);
+    };
+  }, []);
+
+  // Handle incoming control commands from Phone
+  const handleControlCommand = useCallback((cmd: TvControlCommand) => {
+    const engine = engineRef.current;
+
+    switch (cmd.type) {
+      case 'START_GAME':
+        setGameMode(cmd.mode);
+        setDifficulty(cmd.difficulty);
+        setIsTutorial(false);
+        postureDetector.resetCalibration();
+        engine.difficulty = cmd.difficulty;
+        engine.state = 'calibrating';
+        setGameState('calibrating');
+        break;
+      case 'PAUSE':
+        engine.pauseSession();
+        break;
+      case 'RESUME':
+        engine.resumeSession();
+        break;
+      case 'RESTART':
+        if (isTutorial) {
+          engine.startTutorial(engine.calibration);
+        } else {
+          engine.startSession(gameMode, engine.calibration, difficulty);
+        }
+        break;
+      case 'EXIT_TO_MENU':
+        engine.state = 'idle';
+        setIsTutorial(false);
+        setGameState('idle');
+        break;
+      case 'SET_POSTURE':
+        setDetectedPosture(cmd.posture);
+        engine.calibration.posture = cmd.posture;
+        break;
+      case 'START_TUTORIAL':
+        setIsTutorial(true);
+        postureDetector.resetCalibration();
+        engine.state = 'calibrating';
+        setGameState('calibrating');
+        break;
+      case 'SKIP_TUTORIAL':
+        setIsTutorial(false);
+        engine.state = 'idle';
+        setGameState('idle');
+        break;
+    }
+  }, [detectedPosture, isTutorial, gameMode, difficulty]);
+
+  // Push periodic state updates to Phone (~10Hz)
+  const pushStateUpdate = useCallback(() => {
+    if (!sessionRef.current || !isConnected) return;
+
+    const engine = engineRef.current;
+    const update: TvStateUpdate = {
+      phase: engine.state,
+      score: engine.stats.score,
+      combo: engine.stats.combo,
+      maxCombo: engine.stats.maxCombo,
+      timeRemaining: Math.max(0, Math.floor(engine.timeRemaining)),
+      caloriesBurned: Math.round(engine.stats.caloriesBurned),
+      postureMode: detectedPosture,
+      difficulty,
+      mode: gameMode,
+      isPresent: remotePoseProvider.isPresent,
+      tvFps: remotePoseProvider.fps,
+      summary: engine.state === 'game_over' ? {
+        score: engine.stats.score,
+        rank: engine.stats.score > 8000 ? 'S' : engine.stats.score > 4000 ? 'A' : 'B',
+        pulseHits: engine.stats.pulseHits,
+        solarHolds: engine.stats.solarHolds,
+        lasersDodged: engine.stats.lasersDodged,
+        maxCombo: engine.stats.maxCombo,
+        caloriesBurned: Math.round(engine.stats.caloriesBurned),
+      } : undefined,
+    };
+
+    sessionRef.current.sendStateUpdate(update);
+  }, [isConnected, detectedPosture, difficulty, gameMode]);
+
+  useEffect(() => {
+    if (!isConnected) return;
+    pushStateUpdate();
+    const interval = setInterval(pushStateUpdate, 100);
+    return () => clearInterval(interval);
+  }, [isConnected, pushStateUpdate]);
+
+  // Subscribe to Remote Pose Stream
+  useEffect(() => {
+    if (!isConnected) return;
+
+    const unsubscribe = remotePoseProvider.subscribe((landmarks) => {
+      landmarksRef.current = landmarks;
+      const engine = engineRef.current;
+      const now = performance.now();
+
+      // Check Presence & Auto-Pause on TV
+      const isPresent = postureDetector.checkPresence(landmarks);
+
+      if (engine.state === 'playing' || engine.state === 'tutorial') {
+        postureDetector.handlePresenceTracking(isPresent, now, () => {
+          engine.pauseSession();
+        });
+      }
+
+      // Handle Calibration Phase
+      if (engine.state === 'calibrating' && landmarks && isPresent) {
+        postureDetector.addCalibrationSample(landmarks);
+        const currentPosture = postureDetector.classifyPosture(landmarks);
+        setDetectedPosture(currentPosture);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isConnected]);
+
+  // Main 60 FPS TV Canvas Render Loop
+  useEffect(() => {
+    if (!isConnected) return;
+
+    let animId: number;
+
+    const renderLoop = (time: number) => {
+
+      const canvas = canvasRef.current;
+      const engine = engineRef.current;
+      const landmarks = landmarksRef.current;
+
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Resize canvas to match display client dimensions
+          const dpr = window.devicePixelRatio || 1;
+          const displayWidth = canvas.clientWidth;
+          const displayHeight = canvas.clientHeight;
+
+          if (canvas.width !== displayWidth * dpr || canvas.height !== displayHeight * dpr) {
+            canvas.width = displayWidth * dpr;
+            canvas.height = displayHeight * dpr;
+          }
+
+          ctx.save();
+          ctx.scale(dpr, dpr);
+
+          let leftWrist: Point2D | null = null;
+          let rightWrist: Point2D | null = null;
+          let nose: Point2D | null = null;
+          let shoulderCenter: Point2D | null = null;
+
+          if (landmarks) {
+            leftWrist = getFistPosition(landmarks, 'left');
+            rightWrist = getFistPosition(landmarks, 'right');
+            if (landmarks[0]) nose = { x: landmarks[0].x, y: landmarks[0].y };
+            if (landmarks[11] && landmarks[12]) {
+              shoulderCenter = {
+                x: (landmarks[11].x + landmarks[12].x) / 2,
+                y: (landmarks[11].y + landmarks[12].y) / 2,
+              };
+            }
+          }
+
+          // Update game engine logic
+          if (engine.state === 'playing' || engine.state === 'tutorial') {
+            engine.update(time, leftWrist, rightWrist, nose, shoulderCenter, displayWidth, displayHeight);
+          }
+
+          // Render canvas in Avatar Silhouette mode
+          canvasRenderer.render(
+            ctx,
+            displayWidth,
+            displayHeight,
+            engine,
+            landmarks,
+            'silhouette',
+            engine.state === 'calibrating' || engine.state === 'countdown'
+          );
+
+          ctx.restore();
+        }
+      }
+
+      animId = requestAnimationFrame(renderLoop);
+    };
+
+    animId = requestAnimationFrame(renderLoop);
+
+    return () => {
+      cancelAnimationFrame(animId);
+    };
+  }, [isConnected]);
+
+  // Initialize TV Host Receiver Session
   const initReceiver = useCallback((codeToUse: string) => {
     if (sessionRef.current) {
       sessionRef.current.destroy();
@@ -42,28 +294,26 @@ export const TvReceiverView: React.FC = () => {
     const session = new TvReceiverSession(codeToUse);
     sessionRef.current = session;
 
-    session.onStreamReceived = (stream) => {
-      console.log('[TvView] Setting remote media stream');
-      setMediaStream(stream);
-      setIsConnected(true);
-      setErrorMsg(null);
-    };
-
-    session.onHudUpdateReceived = (payload) => {
-      setHudData(payload);
-    };
-
     session.onClientConnected = () => {
+      console.log('[TvView] Phone connected in Pose Sensor Mode');
       setIsConnected(true);
       setErrorMsg(null);
+      // Auto-focus sound enable button for TV remote
+      setTimeout(() => {
+        soundButtonRef.current?.focus();
+      }, 300);
+    };
+
+    session.onControlCommandReceived = (cmd) => {
+      handleControlCommand(cmd);
     };
 
     session.onClientDisconnected = () => {
-      console.log('[TvView] Client disconnected, resetting to pairing screen');
+      console.log('[TvView] Phone disconnected, returning to pairing screen');
       setIsConnected(false);
-      setMediaStream(null);
-      setHudData(null);
-      setSoundEnabled(false);
+      engineRef.current.state = 'idle';
+      setGameState('idle');
+      remotePoseProvider.reset();
     };
 
     session.onError = (err) => {
@@ -74,7 +324,7 @@ export const TvReceiverView: React.FC = () => {
     session.start((registeredCode) => {
       setRoomCode(registeredCode);
     });
-  }, []);
+  }, [handleControlCommand]);
 
   useEffect(() => {
     initReceiver(roomCode);
@@ -82,42 +332,7 @@ export const TvReceiverView: React.FC = () => {
     return () => {
       sessionRef.current?.destroy();
     };
-  }, []); // Initialize on mount; handleRegenerateCode handles manual resets
-
-  // Bind mediaStream to <video> element
-  useEffect(() => {
-    if (videoRef.current && mediaStream) {
-      videoRef.current.srcObject = mediaStream;
-      videoRef.current.play().catch((err) => {
-        console.warn('[TvView] Video autoplay failed:', err);
-      });
-      // Focus sound button for TV remote D-pad
-      if (!soundEnabled) {
-        soundButtonRef.current?.focus();
-      }
-    }
-  }, [mediaStream, soundEnabled]);
-
-  const formatTime = (seconds: number | undefined) => {
-    if (seconds === undefined || !isFinite(seconds) || seconds < 0) return '∞';
-    const totalSecs = Math.max(0, Math.floor(seconds));
-    const m = Math.floor(totalSecs / 60);
-    const s = totalSecs % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const handleEnableSound = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = false;
-      videoRef.current.play().then(() => {
-        setSoundEnabled(true);
-      }).catch((e) => {
-        console.warn('Failed to unmute video:', e);
-      });
-    } else {
-      setSoundEnabled(true);
-    }
-  };
+  }, []);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -133,25 +348,43 @@ export const TvReceiverView: React.FC = () => {
     initReceiver(newCode);
   };
 
-  // 1. STREAMING / ACTIVE PLAYING VIEW (When smartphone is connected and stream is active)
-  if (isConnected && mediaStream) {
-    const phase = hudData?.phase || 'menu';
+  const handleCalibrationComplete = useCallback((confirmedPosture: PostureType = 'uncalibrated') => {
+    const engine = engineRef.current;
+    const finalCalibration = postureDetector.finalizeCalibration(
+      confirmedPosture === 'uncalibrated' ? undefined : confirmedPosture
+    );
+    engine.calibration = finalCalibration;
+    setDetectedPosture(finalCalibration.posture);
 
+    if (isTutorial) {
+      engine.startTutorial(finalCalibration);
+    } else {
+      engine.startSession(gameMode, finalCalibration, difficulty);
+    }
+    setGameState(engine.state);
+  }, [isTutorial, gameMode, difficulty]);
+
+  const handleManualPostureOverride = useCallback((posture: PostureType) => {
+    setDetectedPosture(posture);
+    engineRef.current.calibration.posture = posture;
+  }, []);
+
+  const formatTime = (secs: number) => {
+    if (!Number.isFinite(secs) || secs < 0) return '0:00';
+    const totalSecs = Math.max(0, Math.floor(secs));
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // 1. CONNECTED / ACTIVE TV GAMEPLAY VIEW (Runs local engine at 60 FPS in Silhouette Mode)
+  if (isConnected) {
     return (
-      <div className="relative w-screen h-screen overflow-hidden bg-black select-none flex items-center justify-center">
-        {/* Fullscreen Video Stream */}
-        <video
-          ref={(el) => {
-            videoRef.current = el;
-            if (el && mediaStream && el.srcObject !== mediaStream) {
-              el.srcObject = mediaStream;
-              el.play().catch(() => {});
-            }
-          }}
-          autoPlay
-          playsInline
-          muted={!soundEnabled}
-          className="absolute inset-0 w-full h-full object-contain bg-black"
+      <div className="relative w-screen h-screen overflow-hidden bg-[#0a0e17] select-none flex items-center justify-center">
+        {/* Fullscreen 60 FPS Game Canvas */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full block"
         />
 
         {/* Remote TV Audio Unmute Prompt (D-pad focusable) */}
@@ -165,14 +398,14 @@ export const TvReceiverView: React.FC = () => {
               className="flex items-center gap-3 px-6 py-3.5 rounded-2xl bg-pulse-cyan text-black font-arcade font-black text-base shadow-glow-cyan border-2 border-white hover:scale-105 active:scale-95 transition-all focus:outline-none focus:ring-4 focus:ring-pulse-cyan cursor-pointer"
             >
               <Volume2 className="w-6 h-6 animate-pulse" />
-              <span>PRESS [OK] ON REMOTE FOR SOUND</span>
+              <span>PRESS [OK] ON REMOTE TO ENABLE SOUND</span>
             </button>
           </div>
         )}
 
         {/* Menu Phase Subtle Banner */}
-        {phase === 'menu' && (
-          <div className="absolute top-8 left-1/2 -translate-x-1/2 z-40 px-6 py-3 rounded-full bg-slate-900/90 border border-pulse-cyan/50 backdrop-blur-md shadow-2xl flex items-center gap-3 text-white">
+        {gameState === 'idle' && (
+          <div className="absolute top-8 left-1/2 -translate-x-1/2 z-40 px-6 py-3 rounded-full bg-slate-900/95 border-2 border-pulse-cyan shadow-glow-cyan backdrop-blur-md flex items-center gap-3 text-white">
             <Smartphone className="w-5 h-5 text-pulse-cyan animate-pulse" />
             <span className="font-arcade text-sm tracking-wide">
               CONNECTED TO PHONE — SELECT WORKOUT ON YOUR PHONE
@@ -181,30 +414,17 @@ export const TvReceiverView: React.FC = () => {
         )}
 
         {/* Calibration Overlay */}
-        {(phase === 'calibrating' || phase === 'countdown') && (
-          <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 pointer-events-none">
-            <div className="max-w-md w-full p-8 rounded-3xl bg-slate-900/90 border-2 border-pulse-cyan shadow-glow-cyan text-center flex flex-col items-center">
-              <Sparkles className="w-12 h-12 text-pulse-cyan animate-spin mb-4" />
-              <h2 className="text-3xl font-black font-arcade text-white tracking-widest mb-2">
-                CALIBRATING BODY
-              </h2>
-              <p className="text-gray-300 text-sm mb-6">
-                Stand or sit in camera view facing your phone
-              </p>
-              <div className="w-20 h-20 rounded-full border-4 border-pulse-cyan/30 border-t-pulse-cyan animate-spin flex items-center justify-center mb-4">
-                <span className="text-2xl font-black font-arcade text-pulse-cyan">
-                  {hudData?.calibrationCountdown || '...'}
-                </span>
-              </div>
-              <div className="text-xs uppercase font-arcade tracking-wider text-pulse-gold">
-                Mode: {hudData?.postureMode || 'Detecting'}
-              </div>
-            </div>
-          </div>
+        {(gameState === 'calibrating' || gameState === 'countdown') && (
+          <CalibrationOverlay
+            detectedPosture={detectedPosture}
+            calibration={engineRef.current.calibration}
+            onComplete={handleCalibrationComplete}
+            onManualOverride={handleManualPostureOverride}
+          />
         )}
 
         {/* In-Game Crisp High-Contrast TV HUD Overlay */}
-        {(phase === 'playing' || phase === 'paused' || phase === 'tutorial') && hudData && (
+        {(gameState === 'playing' || gameState === 'paused') && (
           <div className="absolute inset-0 z-30 pointer-events-none p-6 md:p-8 flex flex-col justify-between">
             {/* Top Bar */}
             <div className="flex items-start justify-between w-full">
@@ -212,52 +432,52 @@ export const TvReceiverView: React.FC = () => {
               <div className="flex flex-col">
                 <span className="text-xs font-arcade text-gray-400 uppercase tracking-widest">SCORE</span>
                 <span className="text-4xl md:text-5xl font-black font-arcade text-white drop-shadow-lg tracking-wider">
-                  {hudData.score.toLocaleString()}
+                  {stats.score.toLocaleString()}
                 </span>
-                {hudData.combo > 1 && (
+                {stats.combo > 1 && (
                   <div className="inline-flex items-center gap-1.5 mt-1">
                     <span className={`px-2.5 py-0.5 rounded-md font-black font-arcade text-xs ${
-                      hudData.overdriveActive
-                        ? 'bg-gradient-to-r from-pulse-cyan to-pulse-magenta text-black shadow-glow-cyan animate-pulse'
+                      stats.combo >= 4
+                        ? 'bg-pulse-gold/20 border border-pulse-gold text-pulse-gold shadow-glow-gold'
+                        : stats.combo >= 3
+                        ? 'bg-pulse-magenta/20 border border-pulse-magenta text-pulse-magenta shadow-glow-magenta'
                         : 'bg-pulse-cyan/20 border border-pulse-cyan/40 text-pulse-cyan'
                     }`}>
-                      {hudData.combo}x COMBO
+                      {stats.combo}x COMBO
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* Time Remaining */}
+              {/* Center: Time Remaining */}
               <div className="flex flex-col items-center">
                 <span className="text-xs font-arcade text-gray-400 uppercase tracking-widest">TIME</span>
                 <span className="text-4xl md:text-5xl font-black font-arcade text-pulse-cyan drop-shadow-lg font-mono">
-                  {formatTime(hudData.timeLeft)}
+                  {gameMode === 'endless' ? '∞' : formatTime(timeRemaining)}
                 </span>
               </div>
 
-              {/* Calories & Difficulty */}
+              {/* Right: Calories & Difficulty */}
               <div className="flex flex-col items-end">
                 <span className="text-xs font-arcade text-gray-400 uppercase tracking-widest flex items-center gap-1">
                   <Flame className="w-3.5 h-3.5 text-amber-400" /> CALORIES
                 </span>
                 <span className="text-3xl md:text-4xl font-black font-arcade text-amber-400 drop-shadow-lg">
-                  {hudData.calories} <span className="text-xs text-gray-400 font-normal">kcal</span>
+                  {Math.round(stats.caloriesBurned)} <span className="text-xs text-gray-400 font-normal">kcal</span>
                 </span>
-                {hudData.difficulty && (
-                  <span className="mt-1 px-2 py-0.5 rounded text-[10px] font-arcade font-bold uppercase bg-white/10 text-gray-300 border border-white/20">
-                    {hudData.difficulty}
-                  </span>
-                )}
+                <span className="mt-1 px-2 py-0.5 rounded text-[10px] font-arcade font-bold uppercase bg-white/10 text-gray-300 border border-white/20">
+                  {difficulty}
+                </span>
               </div>
             </div>
 
-            {/* Paused Banner */}
-            {phase === 'paused' && (
-              <div className="self-center p-6 rounded-2xl bg-black/80 border-2 border-pulse-gold shadow-glow-gold text-center animate-pulse">
+            {/* TV Workout Paused Banner in Center */}
+            {gameState === 'paused' && (
+              <div className="self-center p-6 px-10 rounded-2xl bg-black/85 border-2 border-pulse-gold shadow-glow-gold text-center animate-pulse pointer-events-auto">
                 <h3 className="text-4xl font-black font-arcade text-pulse-gold tracking-widest">
                   WORKOUT PAUSED
                 </h3>
-                <p className="text-xs text-gray-300 mt-2">
+                <p className="text-xs text-gray-300 mt-2 font-arcade">
                   Resume or adjust settings on your smartphone
                 </p>
               </div>
@@ -267,70 +487,51 @@ export const TvReceiverView: React.FC = () => {
             <div className="flex items-center justify-between text-xs text-gray-400 font-arcade">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>TV CAST ACTIVE</span>
+                <span className="text-emerald-400 font-bold uppercase tracking-wider">
+                  TV Avatar Silhouette Mode
+                </span>
               </div>
-              <div className="flex items-center gap-4">
-                <span>POSTURE: {hudData.postureMode.toUpperCase()}</span>
-                {soundEnabled ? (
-                  <span className="flex items-center gap-1 text-emerald-400">
-                    <Volume2 className="w-3.5 h-3.5" /> AUDIO ON
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-amber-400">
-                    <VolumeX className="w-3.5 h-3.5" /> AUDIO MUTED
-                  </span>
-                )}
+              <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                <span className="uppercase">Posture: <strong className="text-pulse-cyan">{detectedPosture}</strong></span>
+                <span>•</span>
+                <span>TV FPS: <strong className="text-white">{remotePoseProvider.fps}</strong></span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Workout Summary Overlay on TV */}
-        {phase === 'summary' && hudData && (
-          <div className="absolute inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-8">
-            <div className="max-w-xl w-full p-8 rounded-3xl bg-slate-900/95 border-2 border-pulse-cyan shadow-glow-cyan text-center flex flex-col items-center">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pulse-gold/20 border border-pulse-gold/40 text-pulse-gold text-xs font-arcade font-bold uppercase mb-3">
-                <Trophy className="w-4 h-4" /> WORKOUT COMPLETE
-              </div>
-              <h2 className="text-4xl font-black font-arcade text-white tracking-wider mb-6">
-                SESSION RESULTS
-              </h2>
+        {/* Tutorial Overlay on TV */}
+        {gameState === 'tutorial' && (
+          <TutorialOverlay
+            step={tutorialStep}
+            count={tutorialCount}
+            onSkip={() => {
+              engineRef.current.state = 'idle';
+              setIsTutorial(false);
+              setGameState('idle');
+            }}
+            onFinishAndStart={() => {
+              setIsTutorial(false);
+              engineRef.current.startSession(gameMode, engineRef.current.calibration, difficulty);
+            }}
+          />
+        )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full mb-6">
-                <div className="p-4 rounded-xl bg-black/50 border border-slate-800">
-                  <div className="text-[10px] font-arcade text-gray-400 uppercase">SCORE</div>
-                  <div className="text-2xl font-black font-arcade text-white mt-1">
-                    {hudData.score.toLocaleString()}
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-black/50 border border-slate-800">
-                  <div className="text-[10px] font-arcade text-gray-400 uppercase">RANK</div>
-                  <div className="text-2xl font-black font-arcade text-pulse-gold mt-1">
-                    {hudData.rank || 'A'}
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-black/50 border border-slate-800">
-                  <div className="text-[10px] font-arcade text-gray-400 uppercase">CALORIES</div>
-                  <div className="text-2xl font-black font-arcade text-amber-400 mt-1">
-                    {hudData.calories} kcal
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-black/50 border border-slate-800">
-                  <div className="text-[10px] font-arcade text-gray-400 uppercase">MAX COMBO</div>
-                  <div className="text-2xl font-black font-arcade text-pulse-cyan mt-1">
-                    {hudData.maxCombo}x
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-gray-400 text-xs font-arcade">
-                Touch your phone to play again or return to main menu
-              </p>
-            </div>
-          </div>
+        {/* Workout Summary on TV */}
+        {gameState === 'game_over' && (
+          <SummaryModal
+            stats={stats}
+            mode={gameMode}
+            difficulty={difficulty}
+            onPlayAgain={() => {
+              engineRef.current.startSession(gameMode, engineRef.current.calibration, difficulty);
+            }}
+            onReturnToMenu={() => {
+              engineRef.current.state = 'idle';
+              setIsTutorial(false);
+              setGameState('idle');
+            }}
+          />
         )}
       </div>
     );
@@ -352,7 +553,7 @@ export const TvReceiverView: React.FC = () => {
           <div>
             <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-pulse-cyan/10 border border-pulse-cyan/30 text-pulse-cyan text-[10px] font-bold font-arcade tracking-wider uppercase mb-1">
               <span className="w-1.5 h-1.5 rounded-full bg-pulse-cyan animate-pulse" />
-              TV RECEIVER MODE
+              TV RECEIVER MODE (POSE SENSOR)
             </div>
             <h1 className="text-2xl md:text-3xl font-black font-arcade tracking-wider bg-gradient-to-r from-pulse-cyan via-white to-pulse-magenta bg-clip-text text-transparent">
               KINETIC BLITZ
@@ -439,7 +640,7 @@ export const TvReceiverView: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-arcade text-sm font-bold text-white">Prop Phone Under TV</h3>
-                <p className="text-xs text-gray-400">Place phone in landscape orientation under your TV facing your play area!</p>
+                <p className="text-xs text-gray-400">Your phone becomes the camera sensor; game runs natively at 60 FPS on your TV!</p>
               </div>
             </div>
           </div>
@@ -451,7 +652,7 @@ export const TvReceiverView: React.FC = () => {
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
           <span className="font-arcade tracking-wider">
-            WAITING FOR PHONE CONNECTION...
+            WAITING FOR PHONE SENSOR CONNECTION...
           </span>
         </div>
 
@@ -463,7 +664,7 @@ export const TvReceiverView: React.FC = () => {
 
         <div className="flex items-center gap-2 text-gray-500 text-xs">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Peer-to-peer WebRTC stream over Wi-Fi. Zero server storage.</span>
+          <span>Low-latency Pose JSON over PeerJS. Zero server storage.</span>
         </div>
       </div>
     </div>
