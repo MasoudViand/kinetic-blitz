@@ -54,10 +54,10 @@ export class ParticleSystem {
     }
   }
 
-  public spawnPunchBurst(x: number, y: number, isPower: boolean) {
+  public spawnPunchBurst(x: number, y: number, isPower: boolean, customColor?: string) {
     const count = isPower ? 36 : 20;
-    const baseColor = isPower ? '#00f3ff' : '#38bdf8';
-    const altColor = isPower ? '#ffffff' : '#0284c7';
+    const baseColor = customColor ?? (isPower ? '#00f3ff' : '#38bdf8');
+    const altColor = isPower ? '#ffffff' : (customColor ? '#ffffff' : '#0284c7');
 
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;

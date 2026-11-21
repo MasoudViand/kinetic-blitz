@@ -158,9 +158,9 @@ export class MockPoseProvider {
     for (const orb of game.pulseOrbs) {
       if (orb.isHit || orb.missed || orb.escaped) continue;
       if (orb.telegraphRemaining === 0 && orb.progress >= 0.30 && orb.progress <= 0.85) {
-        // Strike with whichever hand is closest to target X
-        const isLeft = orb.currentPos.x <= 0.5;
-        this.triggerPunch(isLeft ? 'left' : 'right', orb.currentPos.x, orb.currentPos.y);
+        // Strike with the hand matching the orb's color: Cyan (#00f3ff) = Left, Magenta (#ff007f) = Right
+        const isRight = orb.color.toLowerCase() === '#ff007f' || orb.color.toLowerCase().includes('magenta');
+        this.triggerPunch(isRight ? 'right' : 'left', orb.currentPos.x, orb.currentPos.y);
         break;
       }
     }

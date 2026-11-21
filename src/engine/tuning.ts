@@ -12,30 +12,33 @@ export interface DifficultyProfile {
 
 export const DIFFICULTY_PROFILES: Record<DifficultyLevel, DifficultyProfile> = {
   easy: {
-    orbCrossDuration: { min: 3800, max: 4400 },
-    orbCrossDurationFloor: 2600,
-    voltCrossDuration: { min: 7200, max: 8500 },
-    voltHoldDurationMs: 400,
-    spawnIntervalBaseMs: 1900,
-    spawnIntervalFloorMs: 1100,
-    maxConcurrentTargets: 3,
-  },
-  medium: {
+    // Slower paced (former medium speed)
     orbCrossDuration: { min: 3400, max: 4200 },
     orbCrossDurationFloor: 2300,
-    voltCrossDuration: { min: 6500, max: 8000 },
-    voltHoldDurationMs: 450,
+    voltCrossDuration: { min: 7200, max: 8500 }, // Volts unchanged
+    voltHoldDurationMs: 400,
     spawnIntervalBaseMs: 1700,
     spawnIntervalFloorMs: 950,
     maxConcurrentTargets: 3,
   },
-  hard: {
+  medium: {
+    // Active / standard speed (former hard speed)
     orbCrossDuration: { min: 2900, max: 3600 },
     orbCrossDurationFloor: 2100,
-    voltCrossDuration: { min: 5800, max: 7000 },
-    voltHoldDurationMs: 500,
+    voltCrossDuration: { min: 6500, max: 8000 }, // Volts unchanged
+    voltHoldDurationMs: 450,
     spawnIntervalBaseMs: 1450,
     spawnIntervalFloorMs: 850,
+    maxConcurrentTargets: 3,
+  },
+  hard: {
+    // Intense speed (adjusted faster & tighter than former hard)
+    orbCrossDuration: { min: 2200, max: 2800 },
+    orbCrossDurationFloor: 1600,
+    voltCrossDuration: { min: 5800, max: 7000 }, // Volts unchanged
+    voltHoldDurationMs: 500,
+    spawnIntervalBaseMs: 1150,
+    spawnIntervalFloorMs: 700,
     maxConcurrentTargets: 4,
   },
 };
@@ -44,13 +47,13 @@ export const GAME_TUNING = {
   // Edge Telegraph
   ORB_TELEGRAPH_MS: 650, // 650ms edge warning before entering screen
 
-  // Blitz Orb Crossing Durations & Physics
-  ORB_CROSS_DURATION_BASE: { min: 3400, max: 4200 }, // roughly half previous speed
-  ORB_CROSS_DURATION_MIN_FLOOR: 2300, // hard cap even at max difficulty / Blitz Overdrive
+  // Blitz Orb Crossing Durations & Physics (defaults to Medium profile)
+  ORB_CROSS_DURATION_BASE: { min: 2900, max: 3600 },
+  ORB_CROSS_DURATION_MIN_FLOOR: 2100, // hard cap even at max difficulty / Blitz Overdrive
   ORB_HITBOX_MULTIPLIER: 1.25, // generous strike forgiveness
   REACH_ZONE_SPEED_FACTOR: 0.75, // 25% slowdown while crossing inside calibrated reach box
 
-  // Volt Node Crossing & Hold Physics
+  // Volt Node Crossing & Hold Physics (UNCHANGED)
   VOLT_CROSS_DURATION_BASE: { min: 6500, max: 8000 },
   VOLT_WAVE_AMPLITUDE_PX: 25, // subtle drift in pixels (approx 0.025-0.035 norm)
   VOLT_HOLD_DURATION_MS: 450, // 450ms hold requirement
@@ -60,8 +63,8 @@ export const GAME_TUNING = {
   VOLT_CHARGE_DECAY_RATE: 0.5, // charge drains smoothly at half-speed if hand leaves, never hard-resets to 0
 
   // Spawning & Concurrency Caps
-  SPAWN_INTERVAL_BASE_MS: 1700, // ramps gently down to 950ms floor
-  SPAWN_INTERVAL_FLOOR_MS: 950,
+  SPAWN_INTERVAL_BASE_MS: 1450, // ramps gently down to 850ms floor
+  SPAWN_INTERVAL_FLOOR_MS: 850,
   MAX_CONCURRENT_TARGETS: 3,
   MAX_CONCURRENT_VOLT_NODES: 1,
 

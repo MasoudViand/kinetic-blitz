@@ -28,8 +28,8 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
         };
       case 'strike':
         return {
-          title: 'MOVE 1: PUNCH PULSE ORBS',
-          desc: 'Cyan orbs approach you from depth. Wait for the outer ring to align, then punch forward with speed!',
+          title: 'MOVE 1: COLOR-MATCH PUNCH',
+          desc: 'Left Hand (Cyan) punches Cyan orbs, Right Hand (Magenta) punches Magenta orbs! Punch matching orbs as they cross the screen!',
           badge: 'STRIKE PRACTICE',
           color: 'text-pulse-cyan border-pulse-cyan',
           icon: <Zap className="w-5 h-5 text-pulse-cyan animate-pulse" />,

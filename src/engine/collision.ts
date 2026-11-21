@@ -110,6 +110,19 @@ export class CollisionDetector {
 
     for (const h of hands) {
       if (!h.pt) continue;
+
+      // Color-matching rule:
+      // Left hand (Cyan reticle #00f3ff) can ONLY hit Cyan orbs (#00f3ff)
+      // Right hand (Magenta reticle #ff007f) can ONLY hit Magenta orbs (#ff007f)
+      const orbColor = orb.color.toLowerCase();
+      const isMatchingHand =
+        (h.name === 'left' && (orbColor === '#00f3ff' || orbColor.includes('cyan') || orbColor === '#38bdf8')) ||
+        (h.name === 'right' && (orbColor === '#ff007f' || orbColor.includes('magenta') || orbColor === '#f43f5e'));
+
+      if (!isMatchingHand) {
+        continue;
+      }
+
       const wristPixelX = h.pt.x * canvasWidth;
       const wristPixelY = h.pt.y * canvasHeight;
 

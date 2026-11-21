@@ -140,7 +140,9 @@ export class GameEngine {
     if (this.state !== 'tutorial') return;
     if (this.tutorialStep === 'strike') {
       const orb = this.targetFactory.createPulseOrb(this.calibration, 0.8, 'easy');
-      orb.duration = 2600; // Extra readable crossing speed for learning
+      // Alternate Left Hand (Cyan) and Right Hand (Magenta) for practice
+      orb.color = this.tutorialCount === 0 ? '#00f3ff' : '#ff007f';
+      orb.duration = 3400; // Extra readable crossing speed for learning
       this.pulseOrbs = [orb];
     } else if (this.tutorialStep === 'hold') {
       const node = this.targetFactory.createSolarNode(this.calibration, 'easy');
@@ -393,7 +395,7 @@ export class GameEngine {
 
         // Audio & Visual FX
         soundEngine.playPunch(hit.isPower, this.stats.combo);
-        this.particles.spawnPunchBurst(hit.screenPos.x, hit.screenPos.y, hit.isPower);
+        this.particles.spawnPunchBurst(hit.screenPos.x, hit.screenPos.y, hit.isPower, hit.orb.color);
 
         const label = hit.isDirectionalCounter && hit.isPower
           ? `COUNTER POWER +${totalPoints}`
@@ -407,7 +409,7 @@ export class GameEngine {
           label,
           hit.screenPos.x,
           hit.screenPos.y,
-          hit.isPower ? '#ffd700' : hit.isDirectionalCounter ? '#ff007f' : '#00f3ff'
+          hit.isPower ? '#ffd700' : hit.isDirectionalCounter ? '#ff007f' : hit.orb.color
         );
 
         this.pulseOrbs.splice(i, 1);

@@ -215,6 +215,21 @@ export class CanvasRenderer {
     ctx.lineTo(80, 0);
     ctx.stroke();
 
+    // 4. Hand Cue for Orbs (L or R)
+    if (color !== '#ffd700') {
+      const isRight = color.toLowerCase() === '#ff007f' || color.toLowerCase().includes('magenta');
+      ctx.save();
+      ctx.translate(-22, 0);
+      ctx.rotate(-angle); // keep letter upright
+      ctx.font = 'bold 11px Orbitron, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = color;
+      this.applyShadow(ctx, color, 8);
+      ctx.fillText(isRight ? 'R' : 'L', 0, 0);
+      ctx.restore();
+    }
+
     ctx.restore();
   }
 
@@ -285,21 +300,20 @@ export class CanvasRenderer {
       ctx.arc(x, y, currentRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // 5. Bright Core Pip & Reticle Crosshair
+      // 5. Bright Core Pip & Reticle Crosshair with Hand Letter Indicator
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(x, y, currentRadius * 0.3, 0, Math.PI * 2);
+      ctx.arc(x, y, currentRadius * 0.35, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      const crossSize = Math.max(6, currentRadius * 0.45);
-      ctx.beginPath();
-      ctx.moveTo(x - crossSize, y);
-      ctx.lineTo(x + crossSize, y);
-      ctx.moveTo(x, y - crossSize);
-      ctx.lineTo(x, y + crossSize);
-      ctx.stroke();
+      // Hand cue letter inside orb core (L for Left/Cyan, R for Right/Magenta)
+      const isRight = orb.color.toLowerCase() === '#ff007f' || orb.color.toLowerCase().includes('magenta');
+      const handLetter = isRight ? 'R' : 'L';
+      ctx.font = `bold ${Math.round(currentRadius * 0.38)}px Orbitron, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isRight ? '#ff007f' : '#00f3ff';
+      ctx.fillText(handLetter, x, y + 1);
 
       ctx.restore();
     }
