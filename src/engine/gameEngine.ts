@@ -15,6 +15,7 @@ import { CollisionDetector } from './collision';
 import { ParticleSystem } from './particleSystem';
 import { soundEngine } from '../audio/soundEngine';
 import { HistoryManager } from '../utils/historyManager';
+import { GAME_TUNING } from './tuning';
 
 export class GameEngine {
   public state: GameState = 'idle';
@@ -285,26 +286,46 @@ export class GameEngine {
     this.onStatsUpdate?.(this.stats);
   }
 
+  public isInsideReachZone(pos: Point2D): boolean {
+    const center = this.calibration?.shoulderCenter || { x: 0.5, y: 0.45 };
+    const sw = this.calibration?.shoulderWidth || 0.22;
+    const reachX = sw * 1.5;
+    const minX = Math.max(0.12, center.x - reachX);
+    const maxX = Math.min(0.88, center.x + reachX);
+    const minY = Math.max(0.15, center.y - 0.28);
+    const maxY = Math.min(0.82, center.y + 0.35);
+
+    return pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY;
+  }
+
   private spawnDirector(now: number) {
+    const profile = GAME_TUNING.getDifficultyProfile(this.difficulty);
+    const totalActive = this.pulseOrbs.length + this.solarNodes.length;
+
     // Pulse Orbs spawn frequency scaled by difficulty
-    const baseOrbInterval = this.difficulty === 'easy' ? 2000 : this.difficulty === 'hard' ? 1000 : 1500;
-    const minOrbInterval = this.difficulty === 'easy' ? 1500 : this.difficulty === 'hard' ? 700 : 1000;
-    const orbInterval = Math.max(minOrbInterval, baseOrbInterval - (this.difficultyMultiplier - 1) * 350);
-    if (now - this.lastSpawnOrbTime > orbInterval) {
+    const baseOrbInterval = profile.spawnIntervalBaseMs;
+    const floorOrbInterval = profile.spawnIntervalFloorMs;
+    const orbInterval = Math.max(floorOrbInterval, baseOrbInterval - (this.difficultyMultiplier - 1) * 350);
+
+    // Enforce max concurrent active targets cap so slower crossings don't cause screen clutter
+    if (totalActive < profile.maxConcurrentTargets && now - this.lastSpawnOrbTime > orbInterval) {
       this.pulseOrbs.push(this.targetFactory.createPulseOrb(this.calibration, this.difficultyMultiplier, this.difficulty));
       this.lastSpawnOrbTime = now;
     }
 
-    // Solar Nodes spawn frequency
-    const solarInterval = this.difficulty === 'easy' ? 7500 : this.difficulty === 'hard' ? 3800 : 5500;
-    const maxSolar = this.difficulty === 'hard' ? 2 : 1;
-    if (this.solarNodes.length < maxSolar && now - this.lastSpawnSolarTime > solarInterval) {
+    // Solar Nodes spawn frequency: max 1 on screen at a time
+    const solarInterval = this.difficulty === 'easy' ? 8500 : this.difficulty === 'hard' ? 4800 : 6500;
+    if (
+      totalActive < profile.maxConcurrentTargets &&
+      this.solarNodes.length < GAME_TUNING.MAX_CONCURRENT_VOLT_NODES &&
+      now - this.lastSpawnSolarTime > solarInterval
+    ) {
       this.solarNodes.push(this.targetFactory.createSolarNode(this.calibration, this.difficulty));
       this.lastSpawnSolarTime = now;
     }
 
     // Laser Barriers spawn frequency
-    const laserInterval = this.difficulty === 'easy' ? 13500 : this.difficulty === 'hard' ? 6500 : 9000;
+    const laserInterval = this.difficulty === 'easy' ? 14000 : this.difficulty === 'hard' ? 7000 : 9500;
     if (this.laserBarriers.length === 0 && now - this.lastSpawnLaserTime > laserInterval) {
       this.laserBarriers.push(this.targetFactory.createLaserBarrier(this.calibration, this.difficulty));
       this.lastSpawnLaserTime = now;
@@ -313,7 +334,7 @@ export class GameEngine {
   }
 
   private updatePulseOrbs(
-    now: number,
+    _now: number,
     dt: number,
     leftWrist: Point2D | null,
     rightWrist: Point2D | null,
@@ -332,10 +353,12 @@ export class GameEngine {
         continue;
       }
 
-      // 2. Cross-Screen Traversal Phase: Travel from entry to opposite edge
-      const activeElapsed = now - (orb.spawnTime + orb.telegraphDuration);
-      const progress = Math.max(0, activeElapsed / orb.duration);
-      orb.progress = progress;
+      // 2. Cross-Screen Traversal Phase with Reach-Zone Speed Brake (25% slowdown inside reach zone)
+      const baseSpeed = 1 / (orb.duration / 1000);
+      const inReach = this.isInsideReachZone(orb.currentPos);
+      const speedFactor = inReach ? GAME_TUNING.REACH_ZONE_SPEED_FACTOR : 1.0;
+      orb.progress = Math.min(1.3, orb.progress + dt * baseSpeed * speedFactor);
+      const progress = orb.progress;
 
       // Linear base path from spawn to opposite border exit
       const baseX = orb.spawnX + (orb.exitX - orb.spawnX) * progress;
@@ -446,16 +469,23 @@ export class GameEngine {
         continue;
       }
 
-      // 2. Cross-Screen Traversal Phase with smooth perpendicular sine sway
-      const activeElapsed = now - (node.spawnTime + node.telegraphDuration);
-      const progress = Math.max(0, activeElapsed / node.lifetime);
-      node.progress = progress;
+      // 2. Traversal with Reach-Zone Brake & Volt Node Gravity Brake
+      // When player is grabbing the node (node.isHeld), slow its traversal speed by 70% (0.30 multiplier)
+      const baseSpeed = 1 / (node.lifetime / 1000);
+      const inReach = this.isInsideReachZone(node.currentPos);
+      let speedFactor = inReach ? GAME_TUNING.REACH_ZONE_SPEED_FACTOR : 1.0;
+      if (node.isHeld) {
+        speedFactor *= GAME_TUNING.VOLT_HELD_SPEED_MULTIPLIER; // Gravity Brake
+      }
+      node.progress = Math.min(1.3, node.progress + dt * baseSpeed * speedFactor);
+      const progress = node.progress;
 
       const baseX = node.spawnX + (node.exitX - node.spawnX) * progress;
       const baseY = node.spawnY + (node.exitY - node.spawnY) * progress;
 
       const perpX = -node.vy;
       const perpY = node.vx;
+      const activeElapsed = now - (node.spawnTime + node.telegraphDuration);
       const sway = Math.sin((activeElapsed / 1000) * node.frequency * Math.PI * 2) * node.amplitude;
       const curve = Math.sin(Math.min(1.0, progress) * Math.PI) * node.arcOffset;
 

@@ -102,8 +102,10 @@ export interface SolarNodeTarget extends BaseTarget {
   currentHoldTime: number;      // 0..600ms
   radius: number;
   activeHand: 'left' | 'right' | null;
+  isHeld: boolean;              // true while player's hand is locked onto the node
+  heldHandPos?: Point2D | null; // normalized position of the grabbing hand for electric tether
   isCompleted: boolean;
-  lifetime: number;             // Total crossing duration (3400 - 4200ms)
+  lifetime: number;             // Total crossing duration (6500 - 8000ms)
   missed: boolean;
 
   // 360° Cross-Screen Trajectory Fields

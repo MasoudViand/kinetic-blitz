@@ -1,4 +1,5 @@
 import { Point2D, CalibrationData, PulseOrbTarget, SolarNodeTarget, LaserBarrierTarget } from '../types/game';
+import { GAME_TUNING } from './tuning';
 
 interface WristHistory {
   pos: Point2D;
@@ -88,8 +89,8 @@ export class CollisionDetector {
 
     const orbPixelX = orb.currentPos.x * canvasWidth;
     const orbPixelY = orb.currentPos.y * canvasHeight;
-    const radiusMult = isTutorial ? 1.45 : 1.25;
-    const hitRadius = orb.radius * radiusMult; // Intercept anywhere along cross-screen path
+    const radiusMult = (isTutorial ? 1.45 : 1.25) * GAME_TUNING.ORB_HITBOX_MULTIPLIER;
+    const hitRadius = orb.radius * radiusMult; // Generous strike forgiveness from GAME_TUNING
 
     // Cannot hit an orb that has already fully exited the screen bounds
     if (
@@ -151,46 +152,65 @@ export class CollisionDetector {
     canvasHeight: number
   ): { isCompleted: boolean; progress: number; handInNode: 'left' | 'right' | null } {
     if (node.isCompleted || node.missed || node.escaped) {
+      node.isHeld = false;
+      node.heldHandPos = null;
       return { isCompleted: false, progress: 0, handInNode: null };
     }
 
     // While telegraphing at the edge, node is not in play yet
     if (node.telegraphRemaining > 0) {
+      node.isHeld = false;
+      node.heldHandPos = null;
       return { isCompleted: false, progress: 0, handInNode: null };
     }
 
     const nodePixelX = node.currentPos.x * canvasWidth;
     const nodePixelY = node.currentPos.y * canvasHeight;
-    const holdRadius = node.radius * 1.25;
+
+    // Sticky Lock-On (Hysteresis):
+    // If not currently held: must enter within VOLT_GRAB_RADIUS_MULT (1.35x)
+    // If already held: wider sticky radius VOLT_MAINTAIN_RADIUS_MULT (1.85x) to absorb pose jitter
+    const grabRadius = node.radius * GAME_TUNING.VOLT_GRAB_RADIUS_MULT;
+    const maintainRadius = node.radius * GAME_TUNING.VOLT_MAINTAIN_RADIUS_MULT;
+    const activeRadius = node.isHeld ? maintainRadius : grabRadius;
 
     let handInside: 'left' | 'right' | null = null;
+    let grabbingHandPos: Point2D | null = null;
 
-    const checkHand = (pt: Point2D | null) => {
-      if (!pt) return false;
-      const wx = pt.x * canvasWidth;
-      const wy = pt.y * canvasHeight;
-      const dx = wx - nodePixelX;
-      const dy = wy - nodePixelY;
-      return Math.sqrt(dx * dx + dy * dy) <= holdRadius;
-    };
+    const hands: { name: 'left' | 'right'; pt: Point2D | null }[] = [
+      { name: 'left', pt: leftWrist },
+      { name: 'right', pt: rightWrist },
+    ];
 
-    if (checkHand(leftWrist)) {
-      handInside = 'left';
-    } else if (checkHand(rightWrist)) {
-      handInside = 'right';
+    for (const h of hands) {
+      if (!h.pt) continue;
+      const wx = h.pt.x * canvasWidth;
+      const wy = h.pt.y * canvasHeight;
+      const dist = Math.hypot(wx - nodePixelX, wy - nodePixelY);
+
+      if (dist <= activeRadius) {
+        handInside = h.name;
+        grabbingHandPos = h.pt;
+        break;
+      }
     }
 
-    node.activeHand = handInside;
-
-    if (handInside) {
+    if (handInside && grabbingHandPos) {
+      node.isHeld = true;
+      node.activeHand = handInside;
+      node.heldHandPos = { x: grabbingHandPos.x, y: grabbingHandPos.y };
       node.currentHoldTime += dtMs;
+
       if (node.currentHoldTime >= node.holdDurationRequired) {
         node.isCompleted = true;
         return { isCompleted: true, progress: 1.0, handInNode: handInside };
       }
     } else {
-      // Gentle decay if hand slips out
-      node.currentHoldTime = Math.max(0, node.currentHoldTime - dtMs * 1.2);
+      node.isHeld = false;
+      node.activeHand = null;
+      node.heldHandPos = null;
+      // Smooth decay at half-speed instead of resetting to 0
+      node.currentHoldTime = Math.max(0, node.currentHoldTime - dtMs * GAME_TUNING.VOLT_CHARGE_DECAY_RATE);
     }
 
     const progress = Math.min(1.0, node.currentHoldTime / node.holdDurationRequired);

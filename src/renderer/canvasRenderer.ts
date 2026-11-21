@@ -328,19 +328,55 @@ export class CanvasRenderer {
 
       const x = node.currentPos.x * width;
       const y = node.currentPos.y * height;
-      const r = node.radius;
+      // Pulse node slightly larger when grabbed and locked on
+      const isHeld = node.isHeld;
+      const pulseMult = isHeld ? 1.14 + 0.04 * Math.sin(performance.now() * 0.025) : 1.0;
+      const r = node.radius * pulseMult;
 
       ctx.save();
 
-      // 2. Faint Dotted Path Hint Line Ahead Showing Drift Direction
-      ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 6]);
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + node.vx * 80, y + node.vy * 80);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      // 2. Electric Tether Line between Grabbing Hand Cursor and Node Center
+      if (isHeld && node.heldHandPos) {
+        const hx = node.heldHandPos.x * width;
+        const hy = node.heldHandPos.y * height;
+
+        ctx.save();
+        ctx.strokeStyle = '#39ff14';
+        ctx.lineWidth = 3.5;
+        this.applyShadow(ctx, '#39ff14', 18);
+
+        // Jagged animated electric arc
+        const segments = 4;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        for (let s = 1; s < segments; s++) {
+          const t = s / segments;
+          const jitterX = (Math.random() - 0.5) * 14;
+          const jitterY = (Math.random() - 0.5) * 14;
+          ctx.lineTo(hx + (x - hx) * t + jitterX, hy + (y - hy) * t + jitterY);
+        }
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        // Contact spark pip at hand
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(hx, hy, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 3. Faint Dotted Path Hint Line Ahead Showing Drift Direction
+      if (!isHeld) {
+        ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + node.vx * 80, y + node.vy * 80);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       // 3. Rotating Golden Solar Flares
       const time = performance.now() / 800;

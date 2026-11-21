@@ -1,4 +1,5 @@
 import { CalibrationData, PulseOrbTarget, SolarNodeTarget, LaserBarrierTarget, Point2D, DifficultyLevel, PostureType } from '../types/game';
+import { GAME_TUNING } from './tuning';
 
 export interface CrossScreenTrajectory {
   anchorPos: Point2D;
@@ -135,7 +136,7 @@ export class TargetFactory {
 
     // Optional slight perpendicular curve for visual variety (quadratic arc)
     const arcOffset = (Math.random() - 0.5) * 0.08;
-    const telegraphDuration = 450; // 450ms edge warning
+    const telegraphDuration = GAME_TUNING.ORB_TELEGRAPH_MS; // 650ms edge warning
 
     return {
       anchorPos: { x: anchorX, y: anchorY },
@@ -156,12 +157,12 @@ export class TargetFactory {
     difficultyLevel: DifficultyLevel = 'medium'
   ): PulseOrbTarget {
     const traj = this.createCrossScreenTrajectory(calibration, calibration.posture);
+    const profile = GAME_TUNING.getDifficultyProfile(difficultyLevel);
 
-    // Crossing duration over 1.6s - 2.2s (tightening gradually as difficulty ramps)
-    const baseDuration = difficultyLevel === 'easy' ? 2200 : difficultyLevel === 'hard' ? 1650 : 1900;
-    const minDuration = difficultyLevel === 'easy' ? 1700 : difficultyLevel === 'hard' ? 1200 : 1450;
-    const rampFactor = difficultyLevel === 'easy' ? 0.2 : difficultyLevel === 'hard' ? 0.35 : 0.28;
-    const duration = Math.max(minDuration, baseDuration / (1 + (difficultyMultiplier - 1) * rampFactor));
+    // Crossing duration from GAME_TUNING (3400ms - 4200ms base, scaling gently to min floor 2300ms)
+    const baseDuration = profile.orbCrossDuration.min + Math.random() * (profile.orbCrossDuration.max - profile.orbCrossDuration.min);
+    const rampFactor = difficultyLevel === 'easy' ? 0.15 : difficultyLevel === 'hard' ? 0.30 : 0.22;
+    const duration = Math.max(profile.orbCrossDurationFloor, baseDuration / (1 + (difficultyMultiplier - 1) * rampFactor));
 
     // Left vs Right hand color cues based on target anchor side
     const side = traj.anchorPos.x >= (calibration.shoulderCenter?.x ?? 0.5) ? 1 : -1;
@@ -178,7 +179,7 @@ export class TargetFactory {
       scale: 1.0, // Full size throughout cross-screen journey
       timingRingScale: 1.0,
       duration,
-      radius: difficultyLevel === 'easy' ? 50 : 46,
+      radius: difficultyLevel === 'easy' ? 52 : 48,
       color,
       isHit: false,
       powerHit: false,
@@ -203,39 +204,63 @@ export class TargetFactory {
     calibration: CalibrationData,
     difficultyLevel: DifficultyLevel = 'medium'
   ): SolarNodeTarget {
-    const traj = this.createCrossScreenTrajectory(calibration, calibration.posture);
+    const center = calibration.shoulderCenter;
+    const sw = calibration.shoulderWidth || 0.22;
+    const profile = GAME_TUNING.getDifficultyProfile(difficultyLevel);
 
-    // Volt Nodes cross ~45% slower (3.4s - 4.2s) to allow tracking and holding
-    const crossingTime = difficultyLevel === 'easy' ? 4200 : difficultyLevel === 'hard' ? 3400 : 3800;
-    const holdDurationRequired = difficultyLevel === 'easy' ? 450 : difficultyLevel === 'hard' ? 700 : 600;
+    // Constrain Volt Node angles to flatter crossings (within ±35° of horizontal, left-to-right or right-to-left)
+    // Passing through the upper-middle calibrated reach zone so players have plenty of runway to grab them
+    const isLeftToRight = Math.random() > 0.5;
+    const angleDeg = (Math.random() * 70 - 35); // -35° to +35°
+    const theta = isLeftToRight
+      ? (angleDeg * Math.PI) / 180
+      : Math.PI + (angleDeg * Math.PI) / 180;
+
+    // Anchor position in upper-middle calibrated reach zone
+    const anchorX = Math.max(0.32, Math.min(0.68, center.x + (Math.random() * 0.6 - 0.3) * sw));
+    const anchorY = Math.max(0.24, Math.min(0.54, center.y - 0.05 + (Math.random() * 0.16 - 0.08)));
+
+    const spawn = this.rayBoxIntersection(anchorX, anchorY, -Math.cos(theta), -Math.sin(theta), 0.08);
+    const exit = this.rayBoxIntersection(anchorX, anchorY, Math.cos(theta), Math.sin(theta), 0.08);
+
+    const dist = Math.hypot(exit.x - spawn.x, exit.y - spawn.y);
+    const vx = dist > 0.0001 ? (exit.x - spawn.x) / dist : Math.cos(theta);
+    const vy = dist > 0.0001 ? (exit.y - spawn.y) / dist : Math.sin(theta);
+
+    // Volt Nodes cross at relaxed speed (6500ms - 8000ms) with subtle drift
+    const crossingTime = profile.voltCrossDuration.min + Math.random() * (profile.voltCrossDuration.max - profile.voltCrossDuration.min);
+    // Subtle wave amplitude in normalized coordinates (~25px in 720p)
+    const amplitude = GAME_TUNING.VOLT_WAVE_AMPLITUDE_PX / 720;
 
     return {
       id: this.nextId('solar'),
       kind: 'solar_node',
       createdAt: performance.now(),
       spawnTime: performance.now(),
-      centerPos: traj.anchorPos,
-      currentPos: { x: traj.spawnX, y: traj.spawnY },
-      amplitude: 0.03 + Math.random() * 0.02,
-      frequency: 1.2 + Math.random() * 0.8,
-      holdDurationRequired,
+      centerPos: { x: anchorX, y: anchorY },
+      currentPos: { x: spawn.x, y: spawn.y },
+      amplitude,
+      frequency: 1.0 + Math.random() * 0.5, // gentle wave frequency
+      holdDurationRequired: profile.voltHoldDurationMs, // 450ms
       currentHoldTime: 0,
-      radius: difficultyLevel === 'easy' ? 58 : 54,
+      radius: difficultyLevel === 'easy' ? 60 : 56,
       activeHand: null,
+      isHeld: false,
+      heldHandPos: null,
       isCompleted: false,
       lifetime: crossingTime,
       missed: false,
 
       // Cross-screen trajectory fields
-      spawnX: traj.spawnX,
-      spawnY: traj.spawnY,
-      exitX: traj.exitX,
-      exitY: traj.exitY,
-      vx: traj.vx,
-      vy: traj.vy,
-      telegraphRemaining: traj.telegraphDuration,
-      telegraphDuration: traj.telegraphDuration,
-      arcOffset: traj.arcOffset,
+      spawnX: spawn.x,
+      spawnY: spawn.y,
+      exitX: exit.x,
+      exitY: exit.y,
+      vx,
+      vy,
+      telegraphRemaining: GAME_TUNING.ORB_TELEGRAPH_MS,
+      telegraphDuration: GAME_TUNING.ORB_TELEGRAPH_MS,
+      arcOffset: (Math.random() - 0.5) * 0.04, // very subtle curve
       escaped: false,
       progress: 0,
     };
