@@ -13,7 +13,8 @@ class PoseService {
   private callbacks: Set<PoseCallback> = new Set();
   private lastVideoTime = -1;
   private animationFrameId: number | null = null;
-  private isInitializing: boolean = false;
+  private isStartingCamera: boolean = false;
+  private isModelLoading: boolean = false;
   public isCameraReady: boolean = false;
   public errorMessage: string | null = null;
 
@@ -21,27 +22,83 @@ class PoseService {
     return this.stream;
   }
 
+  public isCameraActive(): boolean {
+    return !!(this.stream && this.stream.active && this.isRunning);
+  }
+
   public subscribe(cb: PoseCallback): () => void {
     this.callbacks.add(cb);
     return () => this.callbacks.delete(cb);
   }
 
-  public async initialize(videoElement: HTMLVideoElement): Promise<boolean> {
-    if (this.isInitializing) return false;
-    this.isInitializing = true;
+  /**
+   * Pre-warms the MediaPipe PoseLandmarker model in memory without requesting camera access.
+   * Can be called safely on startup to eliminate startup latency when the workout begins.
+   */
+  public async preloadModel(): Promise<void> {
+    if (this.landmarker || this.isModelLoading) return;
+    this.isModelLoading = true;
+
+    try {
+      const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const wasmPath = `${origin}${baseUrl}/wasm`;
+      const modelPath = `${origin}${baseUrl}/models/pose_landmarker_lite.task`;
+
+      const vision = await FilesetResolver.forVisionTasks(wasmPath);
+
+      this.landmarker = await PoseLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: modelPath,
+          delegate: 'GPU',
+        },
+        runningMode: 'VIDEO',
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      console.log('[PoseService] MediaPipe PoseLandmarker model preloaded successfully.');
+    } catch (err) {
+      console.warn('[PoseService] Model preload note:', err);
+    } finally {
+      this.isModelLoading = false;
+    }
+  }
+
+  /**
+   * Starts the physical camera stream and activates the inference loop.
+   * Only called during active gameplay, calibration, or phone TV sensor mode.
+   */
+  public async startCamera(videoElement: HTMLVideoElement): Promise<boolean> {
     this.video = videoElement;
     this.errorMessage = null;
+
+    // If stream is already active, ensure loop is running and return
+    if (this.stream && this.stream.active) {
+      this.isCameraReady = true;
+      this.startLoop();
+      return true;
+    }
+
+    if (this.isStartingCamera) return false;
+    this.isStartingCamera = true;
 
     // If mock mode is explicitly forced via URL or settings
     if (mockPoseProvider.enabled) {
       this.isCameraReady = true;
-      this.isInitializing = false;
+      this.isStartingCamera = false;
       this.startLoop();
       return true;
     }
 
     try {
-      // 1. Request Webcam Permission
+      // 1. Ensure MediaPipe model is preloaded
+      if (!this.landmarker) {
+        await this.preloadModel();
+      }
+
+      // 2. Request Webcam Permission
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
@@ -52,45 +109,28 @@ class PoseService {
       });
 
       this.stream = stream;
-      this.video.srcObject = stream;
-      await new Promise<void>((resolve) => {
-        if (!this.video) return resolve();
-        this.video.onloadedmetadata = () => {
-          this.video?.play().then(() => resolve()).catch(() => resolve());
-        };
-      });
-
-      // 2. Initialize MediaPipe PoseLandmarker (local bundle assets - zero external network calls)
-      if (!this.landmarker) {
-        const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        const wasmPath = `${origin}${baseUrl}/wasm`;
-        const modelPath = `${origin}${baseUrl}/models/pose_landmarker_lite.task`;
-
-        const vision = await FilesetResolver.forVisionTasks(wasmPath);
-
-        this.landmarker = await PoseLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: modelPath,
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          numPoses: 1,
-          minPoseDetectionConfidence: 0.5,
-          minPosePresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
+      if (this.video) {
+        this.video.srcObject = stream;
+        await new Promise<void>((resolve) => {
+          if (!this.video) return resolve();
+          this.video.onloadedmetadata = () => {
+            this.video?.play().then(() => resolve()).catch(() => resolve());
+          };
+          if (this.video.readyState >= 1) {
+            this.video.play().then(() => resolve()).catch(() => resolve());
+          }
         });
       }
 
       this.isCameraReady = true;
-      this.isInitializing = false;
+      this.isStartingCamera = false;
       this.startLoop();
       return true;
     } catch (err: unknown) {
       const errorStr = err instanceof Error ? err.message : String(err);
-      console.warn('PoseService initialization note (switching to Mock Provider capability):', errorStr);
+      console.warn('[PoseService] Camera start error (switching to Mock Provider capability):', errorStr);
       this.errorMessage = errorStr;
-      this.isInitializing = false;
+      this.isStartingCamera = false;
 
       // Auto-enable mock pose provider so the app remains fully functional without a camera!
       mockPoseProvider.enabled = true;
@@ -98,6 +138,42 @@ class PoseService {
       this.startLoop();
       return false;
     }
+  }
+
+  /**
+   * Completely stops the physical camera hardware and turns off the webcam indicator light.
+   * Preserves the loaded MediaPipe model in memory for instant resumption.
+   */
+  public stopCamera() {
+    this.isRunning = false;
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    if (this.stream) {
+      this.stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // Ignore
+        }
+      });
+      this.stream = null;
+    }
+    if (this.video) {
+      this.video.srcObject = null;
+    }
+    this.isCameraReady = false;
+    this.lastVideoTime = -1;
+  }
+
+  // Backwards compatibility aliases
+  public async initialize(videoElement: HTMLVideoElement): Promise<boolean> {
+    return this.startCamera(videoElement);
+  }
+
+  public stop() {
+    this.stopCamera();
   }
 
   public startLoop(gameEngine?: GameEngine) {
@@ -182,20 +258,7 @@ class PoseService {
     this.animationFrameId = requestAnimationFrame(loop);
   }
 
-  public stop() {
-    this.isRunning = false;
-    if (this.animationFrameId !== null) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
-    }
-    if (this.stream) {
-      this.stream.getTracks().forEach((track) => track.stop());
-      this.stream = null;
-    }
-    if (this.video) {
-      this.video.srcObject = null;
-    }
-  }
+
 }
 
 export const poseService = new PoseService();

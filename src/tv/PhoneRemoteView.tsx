@@ -42,11 +42,16 @@ export const PhoneRemoteView: React.FC<PhoneRemoteViewProps> = ({
   const phase = tvState?.phase || 'idle';
 
   useEffect(() => {
-    const stream = poseService.getStream();
-    if (previewVideoRef.current && stream && previewVideoRef.current.srcObject !== stream) {
-      previewVideoRef.current.srcObject = stream;
-      previewVideoRef.current.play().catch(() => {});
-    }
+    const attachStream = () => {
+      const stream = poseService.getStream();
+      if (previewVideoRef.current && stream && previewVideoRef.current.srcObject !== stream) {
+        previewVideoRef.current.srcObject = stream;
+        previewVideoRef.current.play().catch(() => {});
+      }
+    };
+    attachStream();
+    const interval = setInterval(attachStream, 300);
+    return () => clearInterval(interval);
   }, []);
 
   const formatTime = (seconds: number | undefined) => {

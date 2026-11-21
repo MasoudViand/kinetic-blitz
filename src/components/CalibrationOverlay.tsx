@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { PostureType, CalibrationData } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
+import { poseService } from '../vision/poseService';
 import { CheckCircle2, User, Armchair, RefreshCw } from 'lucide-react';
 
 interface CalibrationOverlayProps {
+  isCameraReady?: boolean;
   detectedPosture: PostureType;
   calibration: CalibrationData;
   onComplete: (confirmedPosture: PostureType) => void;
@@ -11,10 +13,13 @@ interface CalibrationOverlayProps {
 }
 
 export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
+  isCameraReady = true,
   detectedPosture,
   onComplete,
   onManualOverride,
 }) => {
+  const isSensorReady = isCameraReady || detectedPosture !== 'uncalibrated' || poseService.isCameraReady;
+  const [hasStarted, setHasStarted] = useState<boolean>(isSensorReady);
   const [countdown, setCountdown] = useState<number>(5);
   const [currentPosture, setCurrentPosture] = useState<PostureType>(detectedPosture === 'uncalibrated' ? 'standing' : detectedPosture);
   const onCompleteRef = useRef(onComplete);
@@ -29,6 +34,14 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
   }, [detectedPosture]);
 
   useEffect(() => {
+    if (isSensorReady && !hasStarted) {
+      setHasStarted(true);
+    }
+  }, [isSensorReady, hasStarted]);
+
+  useEffect(() => {
+    if (!hasStarted) return;
+
     soundEngine.playCountdown(false);
     const interval = setInterval(() => {
       setCountdown((prev) => {
@@ -44,7 +57,7 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [hasStarted]);
 
   const togglePosture = () => {
     const next = currentPosture === 'standing' ? 'seated' : 'standing';
@@ -77,9 +90,15 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
 
         {/* Center Countdown Digit */}
         <div className="absolute flex flex-col items-center justify-center">
-          <span className="text-5xl sm:text-7xl md:text-8xl font-black font-arcade text-pulse-cyan drop-shadow-lg text-glow-cyan animate-pulse">
-            {countdown > 0 ? countdown : 'GO!'}
-          </span>
+          {hasStarted ? (
+            <span className="text-5xl sm:text-7xl md:text-8xl font-black font-arcade text-pulse-cyan drop-shadow-lg text-glow-cyan animate-pulse">
+              {countdown > 0 ? countdown : 'GO!'}
+            </span>
+          ) : (
+            <span className="text-xs sm:text-sm font-arcade text-pulse-cyan animate-pulse tracking-widest text-center px-4">
+              CONNECTING CAMERA...
+            </span>
+          )}
         </div>
       </div>
 

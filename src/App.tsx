@@ -54,6 +54,7 @@ export const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState<boolean>(soundEngine.getMuted());
   const [detectedPosture, setDetectedPosture] = useState<PostureType>('uncalibrated');
   const [timeRemaining, setTimeRemaining] = useState<number>(60);
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isMockActive, setIsMockActive] = useState<boolean>(mockPoseProvider.enabled);
   const [stats, setStats] = useState<PlayerStats>(engineRef.current.stats);
 
@@ -153,15 +154,45 @@ export const App: React.FC = () => {
     }
   }, [isTvView, handleConnectTv]);
 
-  // Initialize camera & pose service (Only on phone/desktop, never on TV)
+  // Pre-load vision model weights in background (zero camera access, zero hardware activation)
+  useEffect(() => {
+    if (!isTvView) {
+      poseService.preloadModel().catch((err) => {
+        console.warn('[App] Model preload note:', err);
+      });
+    }
+  }, [isTvView]);
+
+  // Camera Hardware Lifecycle:
+  // ONLY enable camera during active gameplay, calibration, countdown, paused, or phone TV sensor mode.
+  // In the main menu (idle), summary modal (game_over), or settings, the camera hardware is completely disabled.
   useEffect(() => {
     if (isTvView) return;
 
-    if (videoRef.current) {
-      poseService.initialize(videoRef.current).then(() => {
-        setIsMockActive(mockPoseProvider.enabled);
-      });
+    const isCameraNeeded = isTvConnected || (
+      gameState === 'calibrating' ||
+      gameState === 'countdown' ||
+      gameState === 'playing' ||
+      gameState === 'paused' ||
+      gameState === 'tutorial'
+    );
+
+    if (isCameraNeeded) {
+      if (videoRef.current) {
+        poseService.startCamera(videoRef.current).then((ready) => {
+          setIsCameraActive(ready);
+          setIsMockActive(mockPoseProvider.enabled);
+        });
+      }
+    } else {
+      poseService.stopCamera();
+      setIsCameraActive(false);
     }
+  }, [isTvView, isTvConnected, gameState]);
+
+  // Subscribe to pose detection stream (Only on phone/desktop, never on TV)
+  useEffect(() => {
+    if (isTvView) return;
 
     const unsubscribe = poseService.subscribe((landmarks) => {
       landmarksRef.current = landmarks;
@@ -198,7 +229,7 @@ export const App: React.FC = () => {
 
     return () => {
       unsubscribe();
-      poseService.stop();
+      poseService.stopCamera();
     };
   }, [isTvView]);
 
@@ -443,6 +474,7 @@ export const App: React.FC = () => {
 
       {(gameState === 'calibrating' || gameState === 'countdown') && (
         <CalibrationOverlay
+          isCameraReady={isCameraActive}
           detectedPosture={detectedPosture}
           calibration={engineRef.current.calibration}
           onComplete={handleCalibrationComplete}
