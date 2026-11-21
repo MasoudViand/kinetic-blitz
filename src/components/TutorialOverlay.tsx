@@ -68,57 +68,57 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
   const info = getStepInfo();
 
   return (
-    <div className="absolute inset-0 z-30 pointer-events-none flex flex-col justify-between p-6">
+    <div className="absolute inset-0 z-30 pointer-events-none flex flex-col justify-between p-2.5 sm:p-4 md:p-6">
       {/* Top Tutorial Instruction Card */}
       <div className="flex flex-col items-center pointer-events-auto max-w-xl mx-auto w-full">
-        <div className="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-4 md:p-5 backdrop-blur-md shadow-2xl flex flex-col items-center text-center relative overflow-hidden animate-in slide-in-from-top-3 duration-200">
+        <div className="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-3 sm:p-4 md:p-5 backdrop-blur-md shadow-2xl flex flex-col items-center text-center relative overflow-hidden animate-in slide-in-from-top-3 duration-200">
           {/* Top Skip Button */}
           {step !== 'outro' && (
             <button
               onClick={onSkip}
-              className="absolute top-3 right-3 text-xs font-arcade text-gray-400 hover:text-white px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 border border-slate-800 transition-all flex items-center gap-1"
+              className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 text-[11px] sm:text-xs font-arcade text-gray-400 hover:text-white px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-black/40 hover:bg-black/60 border border-slate-800 transition-all flex items-center gap-1 cursor-pointer"
             >
               <span>Skip</span>
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </button>
           )}
 
           {/* Step Pill */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border bg-black/60 text-xs font-arcade tracking-wider uppercase mb-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border bg-black/60 text-[10px] sm:text-xs font-arcade tracking-wider uppercase mb-1.5 sm:mb-2">
             {info.icon}
             <span className={info.color}>{info.badge}</span>
           </div>
 
           {/* Title */}
-          <h2 className="text-xl md:text-2xl font-black font-arcade text-white tracking-wider mb-1">
+          <h2 className="text-base sm:text-xl md:text-2xl font-black font-arcade text-white tracking-wider mb-1">
             {info.title}
           </h2>
 
           {/* Description */}
-          <p className="text-xs md:text-sm text-gray-300 max-w-md mx-auto mb-3">
+          <p className="text-[11px] sm:text-xs md:text-sm text-gray-300 max-w-md mx-auto mb-2.5 sm:mb-3">
             {info.desc}
           </p>
 
           {/* Step Progress Indicator */}
           {step !== 'outro' ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/50 border border-slate-800">
-              <span className="w-2 h-2 rounded-full bg-pulse-cyan animate-ping" />
-              <span className="text-xs font-arcade font-bold text-gray-200">
+            <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-black/50 border border-slate-800">
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-pulse-cyan animate-ping" />
+              <span className="text-[11px] sm:text-xs font-arcade font-bold text-gray-200">
                 {info.progressText}
               </span>
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row gap-2.5 w-full mt-2">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5 w-full mt-1.5 sm:mt-2">
               <button
                 onClick={onFinishAndStart}
-                className="flex-1 py-3 px-6 rounded-xl bg-gradient-to-r from-pulse-cyan to-pulse-magenta font-arcade font-bold text-black shadow-glow-cyan hover:opacity-95 transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 sm:py-3 px-4 sm:px-6 rounded-xl bg-gradient-to-r from-pulse-cyan to-pulse-magenta font-arcade font-bold text-black shadow-glow-cyan hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm"
               >
-                <Play className="w-4 h-4 fill-black" />
+                <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-black" />
                 START REAL WORKOUT
               </button>
               <button
                 onClick={onSkip}
-                className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-arcade font-bold text-gray-200 transition-all"
+                className="py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-arcade font-bold text-gray-200 transition-all cursor-pointer"
               >
                 Return to Menu
               </button>
@@ -129,7 +129,7 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
 
       {/* Bottom Step Dots */}
       {step !== 'outro' && (
-        <div className="flex items-center justify-center gap-2 mb-4 pointer-events-auto">
+        <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-2 sm:mb-4 pointer-events-auto">
           {(['strike', 'hold', 'dodge'] as TutorialStep[]).map((s, idx) => {
             const stepOrder: Record<TutorialStep, number> = {
               intro: 0,
@@ -146,7 +146,7 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
             return (
               <div
                 key={s}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-arcade transition-all ${
+                className={`flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border text-[10px] sm:text-xs font-arcade transition-all ${
                   isActive
                     ? 'border-pulse-cyan bg-pulse-cyan/20 text-white shadow-glow-cyan'
                     : isDone
@@ -156,7 +156,7 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
               >
                 <span>{idx + 1}.</span>
                 <span className="capitalize">{s}</span>
-                {isDone && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 ml-0.5" />}
+                {isDone && <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 ml-0.5" />}
               </div>
             );
           })}

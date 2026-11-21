@@ -269,8 +269,9 @@ export class CanvasRenderer {
           ctx.fillStyle = `rgba(255, 26, 64, ${alpha})`;
           ctx.fillRect(0, 0, width, squatY);
 
-          // Warning text banner
-          ctx.font = 'bold 26px Orbitron, sans-serif';
+          // Warning text banner scaled to canvas width
+          const squatFontSize = Math.max(14, Math.min(26, width * 0.04));
+          ctx.font = `bold ${Math.round(squatFontSize)}px Orbitron, sans-serif`;
           ctx.fillStyle = '#ff1a40';
           ctx.textAlign = 'center';
           ctx.shadowColor = '#ff1a40';
@@ -303,7 +304,8 @@ export class CanvasRenderer {
           ctx.fillStyle = `rgba(255, 26, 64, ${alpha})`;
           ctx.fillRect(startX, 0, beamWidth, height);
 
-          ctx.font = 'bold 24px Orbitron, sans-serif';
+          const leanFontSize = Math.max(11, Math.min(22, width * 0.035));
+          ctx.font = `bold ${Math.round(leanFontSize)}px Orbitron, sans-serif`;
           ctx.fillStyle = '#ff1a40';
           ctx.textAlign = 'center';
           ctx.shadowColor = '#ff1a40';
@@ -349,12 +351,15 @@ export class CanvasRenderer {
       ctx.save();
       ctx.translate(x, y);
 
-      // 2X Sized outer targeting ring (48px up to 80px with fast strike velocity)
-      const baseRadius = 48 + Math.min(32, vel * 16);
+      // Proportional reticle scaling based on screen dimensions (scales dynamically on phone screens)
+      const minDim = Math.min(width, height);
+      const reticleScale = Math.min(1.0, Math.max(0.65, minDim / 800));
+      const baseRadius = (44 + Math.min(28, vel * 14)) * reticleScale;
+
       ctx.strokeStyle = isFast ? '#ffffff' : color;
-      ctx.lineWidth = isFast ? 5.5 : 4.0;
+      ctx.lineWidth = (isFast ? 5.0 : 3.5) * reticleScale;
       ctx.shadowColor = isFast ? '#ffffff' : color;
-      ctx.shadowBlur = isFast ? 28 : 16;
+      ctx.shadowBlur = (isFast ? 24 : 14) * reticleScale;
 
       ctx.beginPath();
       ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
@@ -363,30 +368,30 @@ export class CanvasRenderer {
       // Inner tactical dashed ring
       ctx.save();
       ctx.strokeStyle = isFast ? 'rgba(255, 255, 255, 0.7)' : `${color}88`;
-      ctx.lineWidth = 2.0;
-      ctx.setLineDash([6, 8]);
+      ctx.lineWidth = 2.0 * reticleScale;
+      ctx.setLineDash([5 * reticleScale, 7 * reticleScale]);
       ctx.beginPath();
       ctx.arc(0, 0, baseRadius * 0.55, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
 
-      // 2X Glowing center core pip (diameter 22px)
+      // Glowing center core pip
       ctx.fillStyle = isFast ? '#ffffff' : color;
       ctx.beginPath();
-      ctx.arc(0, 0, 11, 0, Math.PI * 2);
+      ctx.arc(0, 0, 10 * reticleScale, 0, Math.PI * 2);
       ctx.fill();
 
       // Center bright core
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.arc(0, 0, 4 * reticleScale, 0, Math.PI * 2);
       ctx.fill();
 
-      // 2X Crosshair tick marks (compass axes)
+      // Crosshair tick marks (compass axes)
       ctx.strokeStyle = isFast ? '#ffffff' : color;
-      ctx.lineWidth = isFast ? 4.0 : 3.0;
-      const tickStart = baseRadius - 8;
-      const tickEnd = baseRadius + 12;
+      ctx.lineWidth = (isFast ? 3.5 : 2.5) * reticleScale;
+      const tickStart = baseRadius - 6 * reticleScale;
+      const tickEnd = baseRadius + 10 * reticleScale;
 
       ctx.beginPath();
       // Left tick

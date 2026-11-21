@@ -338,7 +338,7 @@ export const TvReceiverView: React.FC = () => {
 
   // 2. PAIRING / WAITING SCREEN (No phone connected yet)
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#070b12] text-white flex flex-col justify-between p-6 md:p-10 select-none">
+    <div className="relative w-full h-full min-h-[100dvh] overflow-y-auto bg-[#070b12] text-white flex flex-col justify-between p-4 sm:p-6 md:p-10 select-none">
       {/* Decorative Cyber Background Glows */}
       <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-pulse-cyan/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-pulse-magenta/10 rounded-full blur-[140px] pointer-events-none" />

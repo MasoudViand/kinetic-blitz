@@ -74,11 +74,11 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
 
   return (
     <div
-      className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+      className="absolute inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative max-w-md w-full bg-slate-900/95 border border-slate-700 hover:border-pulse-cyan/50 transition-colors rounded-2xl p-5 md:p-6 shadow-2xl flex flex-col overflow-hidden text-left"
+        className="relative max-w-md w-full max-h-[92dvh] bg-slate-900/95 border border-slate-700 hover:border-pulse-cyan/50 transition-colors rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col overflow-y-auto text-left my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Subtle Decorative Background Glows */}
@@ -86,17 +86,17 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
         <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-pulse-magenta/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* Modal Header */}
-        <div className="flex items-start justify-between pb-4 border-b border-slate-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-pulse-cyan/15 border border-pulse-cyan/30 text-pulse-cyan shadow-sm">
-              <Cast className="w-6 h-6" />
+        <div className="flex items-start justify-between pb-3 sm:pb-4 border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-pulse-cyan/15 border border-pulse-cyan/30 text-pulse-cyan shadow-sm">
+              <Cast className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-pulse-cyan/10 border border-pulse-cyan/30 text-pulse-cyan text-[10px] font-bold tracking-wider uppercase mb-1">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-pulse-cyan/10 border border-pulse-cyan/30 text-pulse-cyan text-[9px] sm:text-[10px] font-bold tracking-wider uppercase mb-0.5 sm:mb-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-pulse-cyan animate-pulse" />
                 Wireless Display
               </div>
-              <h2 className="text-xl font-black font-arcade text-white tracking-wider">
+              <h2 className="text-lg sm:text-xl font-black font-arcade text-white tracking-wider">
                 PLAY ON TV
               </h2>
             </div>
@@ -107,40 +107,40 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
             aria-label="Close"
             className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-gray-400 hover:text-white transition-all border border-slate-700 cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* When already connected */}
         {isConnected ? (
-          <div className="my-5 flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/15 border-2 border-emerald-500/40 text-emerald-400 flex items-center justify-center mb-3">
-              <CheckCircle2 className="w-8 h-8" />
+          <div className="my-4 sm:my-5 flex flex-col items-center text-center">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-emerald-500/15 border-2 border-emerald-500/40 text-emerald-400 flex items-center justify-center mb-2.5 sm:mb-3">
+              <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" />
             </div>
-            <h3 className="text-lg font-black font-arcade text-white">
+            <h3 className="text-base sm:text-lg font-black font-arcade text-white">
               CONNECTED TO TV
             </h3>
-            <p className="text-xs text-gray-300 mt-1 mb-3">
+            <p className="text-[11px] sm:text-xs text-gray-300 mt-1 mb-2.5 sm:mb-3">
               Streaming game video & audio to room <span className="text-pulse-cyan font-mono font-bold">{connectedCode}</span>
             </p>
 
             {/* Landscape placement tip */}
-            <div className="w-full p-3.5 rounded-xl bg-black/40 border border-pulse-cyan/30 flex items-start gap-3 text-left mb-5">
-              <Smartphone className="w-5 h-5 text-pulse-cyan shrink-0 mt-0.5" />
-              <div className="text-xs text-gray-300">
+            <div className="w-full p-3 sm:p-3.5 rounded-xl bg-black/40 border border-pulse-cyan/30 flex items-start gap-2.5 sm:gap-3 text-left mb-4 sm:mb-5">
+              <Smartphone className="w-4 h-4 sm:w-5 sm:h-5 text-pulse-cyan shrink-0 mt-0.5" />
+              <div className="text-[11px] sm:text-xs text-gray-300">
                 <strong className="text-white block font-semibold mb-0.5">Placement Tip:</strong>
                 Prop your phone horizontally below your TV facing your play area for optimal pose tracking.
               </div>
             </div>
 
-            <div className="flex items-center gap-3 w-full">
+            <div className="flex items-center gap-2.5 sm:gap-3 w-full">
               <button
                 type="button"
                 onClick={() => {
                   onDisconnect();
                   onClose();
                 }}
-                className="w-full py-3 px-4 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-arcade font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="w-full py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-arcade font-bold text-xs flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer"
               >
                 <Unlink className="w-4 h-4" />
                 DISCONNECT TV
@@ -148,7 +148,7 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-arcade font-bold text-xs transition-all cursor-pointer"
+                className="w-full py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-arcade font-bold text-xs transition-all cursor-pointer"
               >
                 DONE
               </button>
@@ -156,17 +156,17 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
           </div>
         ) : (
           /* Pairing Form */
-          <form onSubmit={handleConnect} className="my-4 space-y-4">
+          <form onSubmit={handleConnect} className="my-3 sm:my-4 space-y-3 sm:space-y-4">
             {/* 2-Step Instructions */}
-            <div className="space-y-2.5 p-3.5 rounded-xl bg-black/40 border border-slate-800 text-xs">
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-pulse-cyan/20 border border-pulse-cyan/40 text-pulse-cyan font-arcade font-bold text-[11px] flex items-center justify-center shrink-0">1</span>
+            <div className="space-y-2 p-3 sm:p-3.5 rounded-xl bg-black/40 border border-slate-800 text-[11px] sm:text-xs">
+              <div className="flex items-start gap-2 sm:gap-2.5">
+                <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-pulse-cyan/20 border border-pulse-cyan/40 text-pulse-cyan font-arcade font-bold text-[10px] sm:text-[11px] flex items-center justify-center shrink-0">1</span>
                 <span className="text-gray-300">
-                  Open <code className="px-1.5 py-0.5 rounded bg-slate-800 text-pulse-cyan font-mono font-bold text-[11px]">{tvUrl}</code> on your Android TV or Smart TV browser.
+                  Open <code className="px-1.5 py-0.5 rounded bg-slate-800 text-pulse-cyan font-mono font-bold text-[10px] sm:text-[11px] break-all">{tvUrl}</code> on TV browser.
                 </span>
               </div>
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-pulse-cyan/20 border border-pulse-cyan/40 text-pulse-cyan font-arcade font-bold text-[11px] flex items-center justify-center shrink-0">2</span>
+              <div className="flex items-start gap-2 sm:gap-2.5">
+                <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-pulse-cyan/20 border border-pulse-cyan/40 text-pulse-cyan font-arcade font-bold text-[10px] sm:text-[11px] flex items-center justify-center shrink-0">2</span>
                 <span className="text-gray-300">
                   Enter the 4-character code shown on your TV screen below.
                 </span>
@@ -175,7 +175,7 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
 
             {/* Room Code Input */}
             <div>
-              <label htmlFor="tv-room-code" className="block text-xs font-arcade font-bold text-gray-300 uppercase tracking-wider mb-2">
+              <label htmlFor="tv-room-code" className="block text-[11px] sm:text-xs font-arcade font-bold text-gray-300 uppercase tracking-wider mb-1.5 sm:mb-2">
                 4-Character TV Room Code
               </label>
               <div className="relative">
@@ -187,32 +187,32 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
                   value={code}
                   onChange={handleCodeChange}
                   placeholder="K9XP"
-                  className="w-full py-3.5 px-4 text-center font-mono font-black text-3xl tracking-[0.3em] uppercase bg-black/60 border-2 border-slate-700 rounded-xl focus:border-pulse-cyan focus:ring-2 focus:ring-pulse-cyan/30 text-white placeholder-gray-600 transition-all outline-none"
+                  className="w-full py-2.5 sm:py-3.5 px-3 sm:px-4 text-center font-mono font-black text-2xl sm:text-3xl tracking-[0.25em] sm:tracking-[0.3em] uppercase bg-black/60 border-2 border-slate-700 rounded-xl focus:border-pulse-cyan focus:ring-2 focus:ring-pulse-cyan/30 text-white placeholder-gray-600 transition-all outline-none"
                 />
               </div>
             </div>
 
             {/* Placement Tip */}
-            <div className="p-3 rounded-xl bg-pulse-cyan/5 border border-pulse-cyan/20 flex items-start gap-2.5 text-[11px] text-gray-300">
-              <Smartphone className="w-4 h-4 text-pulse-cyan shrink-0 mt-0.5" />
+            <div className="p-2.5 sm:p-3 rounded-xl bg-pulse-cyan/5 border border-pulse-cyan/20 flex items-start gap-2 sm:gap-2.5 text-[10px] sm:text-[11px] text-gray-300">
+              <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-pulse-cyan shrink-0 mt-0.5" />
               <span>
                 <strong>Tip:</strong> Prop your phone horizontally (landscape) below your TV facing your play area so the camera has a clear view of your body.
               </span>
             </div>
 
             {errorMsg && (
-              <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="p-2 sm:p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px] sm:text-xs flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
             {/* Action Buttons */}
-            <div className="pt-2 flex items-center gap-2.5">
+            <div className="pt-1.5 sm:pt-2 flex items-center gap-2 sm:gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
-                className="w-1/3 py-3 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-gray-300 font-arcade font-bold text-xs transition-all cursor-pointer"
+                className="w-1/3 py-2.5 sm:py-3 px-2 sm:px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-gray-300 font-arcade font-bold text-[11px] sm:text-xs transition-all cursor-pointer"
               >
                 CANCEL
               </button>
@@ -220,16 +220,16 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
               <button
                 type="submit"
                 disabled={code.length !== 4 || isConnecting}
-                className="w-2/3 py-3 px-4 rounded-xl bg-gradient-to-r from-pulse-cyan to-pulse-magenta hover:opacity-95 disabled:opacity-40 disabled:cursor-not-allowed font-arcade font-bold text-sm text-black shadow-glow-cyan transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-2/3 py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl bg-gradient-to-r from-pulse-cyan to-pulse-magenta hover:opacity-95 disabled:opacity-40 disabled:cursor-not-allowed font-arcade font-bold text-xs sm:text-sm text-black shadow-glow-cyan transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {isConnecting ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
                     <span>CONNECTING...</span>
                   </>
                 ) : (
                   <>
-                    <Tv className="w-4 h-4" />
+                    <Tv className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     <span>CONNECT TO TV</span>
                   </>
                 )}

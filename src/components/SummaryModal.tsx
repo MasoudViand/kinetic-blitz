@@ -54,53 +54,53 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
   }, []);
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col items-center justify-center p-2 bg-black/85 backdrop-blur-md overflow-hidden">
-      <div className="max-w-md w-full scale-90 sm:scale-95 md:scale-100 bg-slate-900/90 border border-slate-700 rounded-2xl p-4 text-center shadow-2xl flex flex-col items-center animate-in fade-in zoom-in duration-200">
+    <div className="absolute inset-0 z-40 flex flex-col items-center justify-start sm:justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+      <div className="max-w-md w-full bg-slate-900/95 border border-slate-700 rounded-2xl p-3.5 sm:p-5 text-center shadow-2xl flex flex-col items-center animate-in fade-in zoom-in duration-200 my-auto">
         {/* Top Trophy & Record Badge */}
-        <div className="flex items-center justify-center gap-2 mb-2">
+        <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
           <div className="p-1.5 rounded-full bg-pulse-gold/15 border border-pulse-gold/30 text-pulse-gold">
-            <Trophy className="w-5 h-5" />
+            <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           {isNewRecord && (
-            <span className="px-2.5 py-0.5 rounded-full bg-pulse-gold text-black text-[10px] font-arcade font-bold tracking-wider uppercase shadow-glow-gold">
+            <span className="px-2.5 py-0.5 rounded-full bg-pulse-gold text-black text-[9px] sm:text-[10px] font-arcade font-bold tracking-wider uppercase shadow-glow-gold">
               NEW RECORD!
             </span>
           )}
         </div>
 
-        <h3 className="text-2xl md:text-3xl font-black font-arcade text-white tracking-wider">
+        <h3 className="text-xl sm:text-2xl md:text-3xl font-black font-arcade text-white tracking-wider">
           WORKOUT COMPLETE
         </h3>
-        <p className="text-xs text-gray-400 capitalize mb-3.5">
+        <p className="text-[11px] sm:text-xs text-gray-400 capitalize mb-2.5 sm:mb-3.5">
           <span className="uppercase text-pulse-cyan font-bold font-arcade">{difficulty}</span> • {mode} Session
         </p>
 
         {/* Score & Rank Card */}
-        <div className="w-full flex items-center justify-between p-3.5 rounded-xl bg-black/60 border border-slate-800 mb-3.5">
+        <div className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-xl bg-black/60 border border-slate-800 mb-2.5 sm:mb-3.5">
           <div className="text-left">
-            <div className="text-[10px] font-arcade text-gray-400 uppercase tracking-widest">Total Score</div>
-            <div className="text-3xl md:text-4xl font-black font-arcade text-white tracking-wider">
+            <div className="text-[9px] sm:text-[10px] font-arcade text-gray-400 uppercase tracking-widest">Total Score</div>
+            <div className="text-2xl sm:text-3xl md:text-4xl font-black font-arcade text-white tracking-wider">
               {stats.score.toLocaleString()}
             </div>
-            <div className="text-[11px] text-gray-400 mt-0.5">
+            <div className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5">
               Best: <span className="font-bold text-gray-200">{highscore.toLocaleString()}</span>
             </div>
           </div>
 
-          <div className="flex flex-col items-center justify-center pr-2">
-            <div className="text-[10px] font-arcade text-gray-400 uppercase tracking-widest">Rank</div>
-            <div className={`text-4xl font-black font-arcade ${color}`}>{rank}</div>
+          <div className="flex flex-col items-center justify-center pr-1 sm:pr-2">
+            <div className="text-[9px] sm:text-[10px] font-arcade text-gray-400 uppercase tracking-widest">Rank</div>
+            <div className={`text-3xl sm:text-4xl font-black font-arcade ${color}`}>{rank}</div>
           </div>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-2 w-full mb-3.5 text-left">
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 w-full mb-2.5 sm:mb-3.5 text-left">
           {/* Pulse Hits */}
           <div className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-pulse-cyan shrink-0" />
+            <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-pulse-cyan shrink-0" />
             <div>
-              <div className="text-[10px] text-gray-400">Pulse Strikes</div>
-              <div className="text-xs font-arcade font-bold text-white">
+              <div className="text-[9px] sm:text-[10px] text-gray-400">Pulse Strikes</div>
+              <div className="text-[11px] sm:text-xs font-arcade font-bold text-white">
                 {stats.pulseHits}{' '}
                 <span className="text-[9px] text-pulse-gold font-normal">({stats.powerHits} Power)</span>
               </div>
@@ -109,19 +109,19 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
           {/* Solar Holds */}
           <div className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 flex items-center gap-2">
-            <Sun className="w-4 h-4 text-pulse-gold shrink-0" />
+            <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-pulse-gold shrink-0" />
             <div>
-              <div className="text-[10px] text-gray-400">Solar Holds</div>
-              <div className="text-xs font-arcade font-bold text-white">{stats.solarHolds}</div>
+              <div className="text-[9px] sm:text-[10px] text-gray-400">Solar Holds</div>
+              <div className="text-[11px] sm:text-xs font-arcade font-bold text-white">{stats.solarHolds}</div>
             </div>
           </div>
 
           {/* Laser Dodges */}
           <div className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
+            <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
             <div>
-              <div className="text-[10px] text-gray-400">Lasers Dodged</div>
-              <div className="text-xs font-arcade font-bold text-white">
+              <div className="text-[9px] sm:text-[10px] text-gray-400">Lasers Dodged</div>
+              <div className="text-[11px] sm:text-xs font-arcade font-bold text-white">
                 {stats.lasersDodged}{' '}
                 <span className="text-[9px] text-red-400 font-normal">({stats.lasersHit} hits)</span>
               </div>
@@ -130,10 +130,10 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
           {/* Max Combo & Calories */}
           <div className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 flex items-center gap-2">
-            <Flame className="w-4 h-4 text-amber-400 shrink-0" />
+            <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
             <div>
-              <div className="text-[10px] text-gray-400">Calories Burned</div>
-              <div className="text-xs font-arcade font-bold text-white">
+              <div className="text-[9px] sm:text-[10px] text-gray-400">Calories Burned</div>
+              <div className="text-[11px] sm:text-xs font-arcade font-bold text-white">
                 {stats.caloriesBurned.toFixed(1)} <span className="text-[9px] text-gray-400 font-normal">kcal</span>
               </div>
             </div>
@@ -141,7 +141,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
         </div>
 
         {/* Max Combo Badge */}
-        <div className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg bg-black/40 border border-slate-800 text-xs font-arcade text-gray-300 mb-4">
+        <div className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg bg-black/40 border border-slate-800 text-[11px] sm:text-xs font-arcade text-gray-300 mb-3 sm:mb-4">
           <Award className="w-3.5 h-3.5 text-pulse-magenta" />
           <span>Max Combo Achieved:</span>
           <span className="font-bold text-pulse-magenta">{stats.maxCombo}x</span>
@@ -151,7 +151,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
         <div className="flex flex-col gap-2 w-full">
           <button
             onClick={onPlayAgain}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-pulse-cyan to-pulse-magenta font-arcade font-bold text-black shadow-glow-cyan hover:opacity-95 transition-all flex items-center justify-center gap-2"
+            className="w-full py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-pulse-cyan to-pulse-magenta font-arcade font-bold text-black shadow-glow-cyan hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm"
           >
             <RotateCcw className="w-4 h-4 stroke-[2.5]" />
             PLAY AGAIN
@@ -159,7 +159,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
           <button
             onClick={onReturnToMenu}
-            className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-arcade text-xs font-semibold text-gray-200 transition-all flex items-center justify-center gap-2"
+            className="w-full py-2 sm:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 font-arcade text-xs font-semibold text-gray-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <Menu className="w-4 h-4" />
             Change Mode / Main Menu

@@ -397,7 +397,7 @@ export const App: React.FC = () => {
 
   // PLAYER / PHONE VIEW ROUTE
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#0a0e17] flex items-center justify-center select-none">
+    <div className="relative w-full h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#0a0e17] flex items-center justify-center select-none">
       {/* 1. Underlying Mirrored Webcam Video Element */}
       <video
         ref={videoRef}
@@ -482,16 +482,16 @@ export const App: React.FC = () => {
 
       {/* TV Placement Tip Banner */}
       {showTvPlacementBanner && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900/95 border-2 border-pulse-cyan text-white shadow-glow-cyan backdrop-blur-md">
+        <div className="absolute top-3 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 duration-300 max-w-sm sm:w-auto">
+          <div className="flex items-center gap-2.5 sm:gap-3 px-3.5 py-2.5 sm:px-5 sm:py-3 rounded-2xl bg-slate-900/95 border-2 border-pulse-cyan text-white shadow-glow-cyan backdrop-blur-md">
             <Smartphone className="w-5 h-5 text-pulse-cyan animate-pulse shrink-0" />
             <div className="text-xs">
-              <strong className="text-pulse-cyan block font-arcade">TV CAST CONNECTED!</strong>
-              <span>Prop your phone horizontally below the TV facing your play area.</span>
+              <strong className="text-pulse-cyan block font-arcade text-[11px] sm:text-xs">TV CAST CONNECTED!</strong>
+              <span className="text-[11px] sm:text-xs text-gray-200">Prop your phone horizontally below the TV facing your play area.</span>
             </div>
             <button
               onClick={() => setShowTvPlacementBanner(false)}
-              className="ml-2 text-gray-400 hover:text-white p-1 cursor-pointer"
+              className="ml-auto text-gray-400 hover:text-white p-1 cursor-pointer shrink-0"
             >
               <X className="w-4 h-4" />
             </button>

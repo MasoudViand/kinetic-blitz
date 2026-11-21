@@ -36,10 +36,10 @@ export const DevToolbar: React.FC<DevToolbarProps> = ({ onPostureChanged }) => {
   };
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 flex flex-col items-start font-sans">
+    <div className="fixed bottom-2 left-2 sm:bottom-4 sm:left-4 z-50 flex flex-col items-start font-sans max-w-[calc(100vw-1rem)]">
       {/* Drawer Panel */}
       {isOpen && (
-        <div className="mb-2 p-3.5 rounded-xl bg-slate-900/95 border border-slate-700 backdrop-blur-md shadow-2xl text-xs w-72 flex flex-col gap-2.5 animate-in slide-in-from-bottom-2 duration-150">
+        <div className="mb-2 p-3 sm:p-3.5 rounded-xl bg-slate-900/95 border border-slate-700 backdrop-blur-md shadow-2xl text-xs w-64 sm:w-72 max-w-full max-h-[70vh] overflow-y-auto flex flex-col gap-2 sm:gap-2.5 animate-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center justify-between pb-2 border-b border-slate-800">
             <span className="font-arcade font-bold text-pulse-cyan text-[11px] tracking-wider uppercase">
               Dev & Mock Controls
