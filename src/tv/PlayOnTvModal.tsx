@@ -74,16 +74,18 @@ export const PlayOnTvModal: React.FC<PlayOnTvModalProps> = ({
 
   return (
     <div
-      className="absolute inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto"
+      className="absolute inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="relative max-w-md w-full max-h-[92dvh] bg-slate-900/95 border border-slate-700 hover:border-pulse-cyan/50 transition-colors rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col overflow-y-auto text-left my-auto"
+        className="relative max-w-md w-full bg-slate-900/95 border border-slate-700 hover:border-pulse-cyan/50 transition-colors rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col text-left my-auto overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Subtle Decorative Background Glows */}
-        <div className="absolute -top-16 -right-16 w-44 h-44 bg-pulse-cyan/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-pulse-magenta/15 rounded-full blur-3xl pointer-events-none" />
+        {/* Subtle Decorative Background Glows (contained in overflow-hidden to prevent scrollbars) */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
+          <div className="absolute -top-16 -right-16 w-44 h-44 bg-pulse-cyan/15 rounded-full blur-3xl" />
+          <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-pulse-magenta/15 rounded-full blur-3xl" />
+        </div>
 
         {/* Modal Header */}
         <div className="flex items-start justify-between pb-3 sm:pb-4 border-b border-slate-800 shrink-0">
