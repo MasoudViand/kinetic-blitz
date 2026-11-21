@@ -171,7 +171,7 @@ export const App: React.FC = () => {
       score: stats.score,
       combo: stats.combo,
       maxCombo: stats.maxCombo,
-      timeLeft: timeRemaining,
+      timeLeft: Math.max(0, Math.floor(timeRemaining)),
       overdriveActive: stats.combo >= 10,
       postureMode: detectedPosture || engineRef.current.calibration.posture,
       calibrationCountdown: gameState === 'countdown' ? 5 : 0,

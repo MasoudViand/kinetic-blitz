@@ -98,6 +98,14 @@ export const TvReceiverView: React.FC = () => {
     }
   }, [mediaStream, soundEnabled]);
 
+  const formatTime = (seconds: number | undefined) => {
+    if (seconds === undefined || !isFinite(seconds) || seconds < 0) return '∞';
+    const totalSecs = Math.max(0, Math.floor(seconds));
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   const handleEnableSound = () => {
     if (videoRef.current) {
       videoRef.current.muted = false;
@@ -223,7 +231,7 @@ export const TvReceiverView: React.FC = () => {
               <div className="flex flex-col items-center">
                 <span className="text-xs font-arcade text-gray-400 uppercase tracking-widest">TIME</span>
                 <span className="text-4xl md:text-5xl font-black font-arcade text-pulse-cyan drop-shadow-lg font-mono">
-                  {hudData.timeLeft !== undefined ? `${Math.floor(hudData.timeLeft / 60)}:${(hudData.timeLeft % 60).toString().padStart(2, '0')}` : '∞'}
+                  {formatTime(hudData.timeLeft)}
                 </span>
               </div>
 
