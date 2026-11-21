@@ -8,6 +8,7 @@ interface WristHistory {
 export interface HitResult {
   orb: PulseOrbTarget;
   isPower: boolean;
+  isDirectionalCounter?: boolean;
   hand: 'left' | 'right';
   screenPos: Point2D;
 }
@@ -49,19 +50,27 @@ export class CollisionDetector {
   }
 
   public getWristVelocity(hand: 'left' | 'right'): number {
+    return this.getWristVelocityVector(hand).speed;
+  }
+
+  public getWristVelocityVector(hand: 'left' | 'right'): { speed: number; vx: number; vy: number } {
     const history = hand === 'left' ? this.leftWristHistory : this.rightWristHistory;
-    if (history.length < 2) return 0;
+    if (history.length < 2) return { speed: 0, vx: 0, vy: 0 };
 
     const oldest = history[0];
     const newest = history[history.length - 1];
     const dt = (newest.time - oldest.time) / 1000;
-    if (dt <= 0.001) return 0;
+    if (dt <= 0.001) return { speed: 0, vx: 0, vy: 0 };
 
     const dx = newest.pos.x - oldest.pos.x;
     const dy = newest.pos.y - oldest.pos.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dist = Math.hypot(dx, dy);
 
-    return dist / dt; // Normalized units per second
+    return {
+      speed: dist / dt,
+      vx: dist > 0.0001 ? dx / dist : 0,
+      vy: dist > 0.0001 ? dy / dist : 0,
+    };
   }
 
   public checkPulseOrbCollision(
@@ -72,25 +81,22 @@ export class CollisionDetector {
     canvasHeight: number,
     isTutorial: boolean = false
   ): HitResult | null {
-    if (orb.isHit || orb.missed) return null;
+    if (orb.isHit || orb.missed || orb.escaped) return null;
 
-    // Check hit window:
-    // Minimum scale required before an orb can be struck (avoid hitting far background spawns)
-    // Players can hit orbs continuously until they leave the screen!
-    const minScale = isTutorial ? 0.45 : 0.55;
-    if (orb.scale < minScale) return null;
+    // While telegraphing at the edge before entering playfield, orb cannot be hit yet
+    if (orb.telegraphRemaining > 0) return null;
 
     const orbPixelX = orb.currentPos.x * canvasWidth;
     const orbPixelY = orb.currentPos.y * canvasHeight;
-    const radiusMult = isTutorial ? 1.45 : 1.22;
-    const hitRadius = orb.radius * Math.max(1.0, orb.scale) * radiusMult; // Generous hit registration
+    const radiusMult = isTutorial ? 1.45 : 1.25;
+    const hitRadius = orb.radius * radiusMult; // Intercept anywhere along cross-screen path
 
-    // Cannot hit an orb that has already fully exited the screen
+    // Cannot hit an orb that has already fully exited the screen bounds
     if (
-      orbPixelX + hitRadius < 0 ||
-      orbPixelX - hitRadius > canvasWidth ||
-      orbPixelY + hitRadius < 0 ||
-      orbPixelY - hitRadius > canvasHeight
+      orbPixelX + hitRadius < -20 ||
+      orbPixelX - hitRadius > canvasWidth + 20 ||
+      orbPixelY + hitRadius < -20 ||
+      orbPixelY - hitRadius > canvasHeight + 20
     ) {
       return null;
     }
@@ -111,8 +117,14 @@ export class CollisionDetector {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist <= hitRadius) {
-        const vel = this.getWristVelocity(h.name);
-        const isPower = vel > 1.2; // Power hit threshold (fast snap)
+        const motion = this.getWristVelocityVector(h.name);
+        const isSpeedPower = motion.speed > 1.1;
+
+        // Directional counter strike: hand moving against the orb's velocity vector
+        // Dot product < -0.15 indicates striking directly into incoming trajectory
+        const dot = motion.vx * orb.vx + motion.vy * orb.vy;
+        const isDirectionalCounter = dot < -0.15;
+        const isPower = isSpeedPower || (motion.speed > 0.85 && isDirectionalCounter);
 
         orb.isHit = true;
         orb.powerHit = isPower;
@@ -120,6 +132,7 @@ export class CollisionDetector {
         return {
           orb,
           isPower,
+          isDirectionalCounter,
           hand: h.name,
           screenPos: { x: orbPixelX, y: orbPixelY },
         };
@@ -137,7 +150,12 @@ export class CollisionDetector {
     canvasWidth: number,
     canvasHeight: number
   ): { isCompleted: boolean; progress: number; handInNode: 'left' | 'right' | null } {
-    if (node.isCompleted || node.missed) {
+    if (node.isCompleted || node.missed || node.escaped) {
+      return { isCompleted: false, progress: 0, handInNode: null };
+    }
+
+    // While telegraphing at the edge, node is not in play yet
+    if (node.telegraphRemaining > 0) {
       return { isCompleted: false, progress: 0, handInNode: null };
     }
 

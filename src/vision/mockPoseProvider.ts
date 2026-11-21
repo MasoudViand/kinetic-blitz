@@ -154,10 +154,10 @@ export class MockPoseProvider {
   }
 
   private runBotLogic(game: GameEngine, now: number) {
-    // 1. Check incoming Pulse Orbs: hit when scale is approaching peak (scale >= 0.75)
+    // 1. Check incoming Pulse Orbs: hit once telegraph ends and target passes into reachable screen zone
     for (const orb of game.pulseOrbs) {
-      if (orb.isHit || orb.missed) continue;
-      if (orb.scale >= 0.75 && orb.scale <= 1.05) {
+      if (orb.isHit || orb.missed || orb.escaped) continue;
+      if (orb.telegraphRemaining === 0 && orb.progress >= 0.30 && orb.progress <= 0.85) {
         // Strike with whichever hand is closest to target X
         const isLeft = orb.currentPos.x <= 0.5;
         this.triggerPunch(isLeft ? 'left' : 'right', orb.currentPos.x, orb.currentPos.y);
@@ -165,10 +165,10 @@ export class MockPoseProvider {
       }
     }
 
-    // 2. Check Solar Nodes: move closest hand to hold
+    // 2. Check Solar Nodes: move closest hand to track and hold
     if (game.solarNodes.length > 0) {
       const node = game.solarNodes[0];
-      if (!node.isCompleted && !node.missed) {
+      if (!node.isCompleted && !node.missed && !node.escaped && node.telegraphRemaining === 0) {
         const isLeft = node.currentPos.x <= 0.5;
         if (isLeft) {
           this.leftHandTarget = { x: node.currentPos.x, y: node.currentPos.y };

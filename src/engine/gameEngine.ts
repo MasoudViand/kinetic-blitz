@@ -139,18 +139,12 @@ export class GameEngine {
     if (this.state !== 'tutorial') return;
     if (this.tutorialStep === 'strike') {
       const orb = this.targetFactory.createPulseOrb(this.calibration, 0.8, 'easy');
-      orb.duration = 2800; // Extra slow for learning!
-      // Center the target at a comfortable reach in front of user
-      const side = this.tutorialCount === 0 ? -1 : 1;
-      const sw = this.calibration.shoulderWidth;
-      orb.targetPos.x = Math.max(0.2, Math.min(0.8, this.calibration.shoulderCenter.x + side * sw * 0.85));
-      orb.targetPos.y = Math.max(0.25, Math.min(0.7, this.calibration.shoulderCenter.y - 0.05));
-      orb.color = side > 0 ? '#ff007f' : '#00f3ff';
+      orb.duration = 2600; // Extra readable crossing speed for learning
       this.pulseOrbs = [orb];
     } else if (this.tutorialStep === 'hold') {
       const node = this.targetFactory.createSolarNode(this.calibration, 'easy');
       node.holdDurationRequired = 500;
-      node.lifetime = 15000; // ample time to hold
+      node.lifetime = 6500; // Ample time to track and hold
       this.solarNodes = [node];
     } else if (this.tutorialStep === 'dodge') {
       const barrier = this.targetFactory.createLaserBarrier(this.calibration, 'easy');
@@ -280,7 +274,7 @@ export class GameEngine {
     }
 
     // 4. Update Pulse Orbs
-    this.updatePulseOrbs(now, leftWrist, rightWrist, canvasWidth, canvasHeight);
+    this.updatePulseOrbs(now, dt, leftWrist, rightWrist, canvasWidth, canvasHeight);
 
     // 5. Update Solar Nodes
     this.updateSolarNodes(now, dt, leftWrist, rightWrist, canvasWidth, canvasHeight);
@@ -320,6 +314,7 @@ export class GameEngine {
 
   private updatePulseOrbs(
     now: number,
+    dt: number,
     leftWrist: Point2D | null,
     rightWrist: Point2D | null,
     canvasWidth: number,
@@ -327,22 +322,41 @@ export class GameEngine {
   ) {
     for (let i = this.pulseOrbs.length - 1; i >= 0; i--) {
       const orb = this.pulseOrbs[i];
-      const elapsed = now - orb.spawnTime;
-      const progress = elapsed / orb.duration;
 
-      // Approaching scale from 0.2 to 1.0 along radial vector
-      orb.scale = 0.2 + progress * 0.8;
-      orb.timingRingScale = Math.max(1.0, 2.2 - progress * 1.2);
+      // 1. Telegraph Phase: Warning chevron at entry border
+      if (orb.telegraphRemaining > 0) {
+        orb.telegraphRemaining = Math.max(0, orb.telegraphRemaining - dt * 1000);
+        orb.currentPos.x = orb.spawnX;
+        orb.currentPos.y = orb.spawnY;
+        orb.progress = 0;
+        continue;
+      }
 
-      // Interpolate position from origin to target
-      orb.currentPos.x = orb.originPos.x + (orb.targetPos.x - orb.originPos.x) * progress;
-      orb.currentPos.y = orb.originPos.y + (orb.targetPos.y - orb.originPos.y) * progress;
+      // 2. Cross-Screen Traversal Phase: Travel from entry to opposite edge
+      const activeElapsed = now - (orb.spawnTime + orb.telegraphDuration);
+      const progress = Math.max(0, activeElapsed / orb.duration);
+      orb.progress = progress;
 
-      // Check collision
+      // Linear base path from spawn to opposite border exit
+      const baseX = orb.spawnX + (orb.exitX - orb.spawnX) * progress;
+      const baseY = orb.spawnY + (orb.exitY - orb.spawnY) * progress;
+
+      // Slight perpendicular quadratic arc curve for visual variety
+      const perpX = -orb.vy;
+      const perpY = orb.vx;
+      const curve = Math.sin(Math.min(1.0, progress) * Math.PI) * orb.arcOffset;
+
+      orb.currentPos.x = baseX + perpX * curve;
+      orb.currentPos.y = baseY + perpY * curve;
+
+      // Check collision anywhere along cross-screen traversal
       const hit = this.collision.checkPulseOrbCollision(orb, leftWrist, rightWrist, canvasWidth, canvasHeight, this.isTutorialMode);
       if (hit) {
-        // Registered hit!
-        const points = hit.isPower ? 150 : 100;
+        // Points: base 100, Power +50, Directional counter +50
+        let points = 100;
+        if (hit.isPower) points += 50;
+        if (hit.isDirectionalCounter) points += 50;
+
         const totalPoints = points * this.stats.combo;
         this.stats.score += totalPoints;
         this.stats.pulseHits++;
@@ -357,11 +371,20 @@ export class GameEngine {
         // Audio & Visual FX
         soundEngine.playPunch(hit.isPower, this.stats.combo);
         this.particles.spawnPunchBurst(hit.screenPos.x, hit.screenPos.y, hit.isPower);
+
+        const label = hit.isDirectionalCounter && hit.isPower
+          ? `COUNTER POWER +${totalPoints}`
+          : hit.isPower
+          ? `POWER +${totalPoints}`
+          : hit.isDirectionalCounter
+          ? `COUNTER +${totalPoints}`
+          : `+${totalPoints}`;
+
         this.particles.addFloatingText(
-          hit.isPower ? `POWER +${totalPoints}` : `+${totalPoints}`,
+          label,
           hit.screenPos.x,
           hit.screenPos.y,
-          hit.isPower ? '#ffd700' : '#00f3ff'
+          hit.isPower ? '#ffd700' : hit.isDirectionalCounter ? '#ff007f' : '#00f3ff'
         );
 
         this.pulseOrbs.splice(i, 1);
@@ -377,10 +400,10 @@ export class GameEngine {
         continue;
       }
 
-      // Check miss: orb continues past the player and is only missed once it completely exits the screen
+      // Check escape: orb crosses exit point and exits screen, or exceeds traversal window
       const orbPixelX = orb.currentPos.x * canvasWidth;
       const orbPixelY = orb.currentPos.y * canvasHeight;
-      const currentRadius = orb.radius * orb.scale;
+      const currentRadius = orb.radius;
 
       const isOffscreen =
         orbPixelX + currentRadius < 0 ||
@@ -388,7 +411,8 @@ export class GameEngine {
         orbPixelY + currentRadius < 0 ||
         orbPixelY - currentRadius > canvasHeight;
 
-      if ((isOffscreen || progress > 3.0) && !orb.isHit) {
+      if ((progress >= 1.0 && isOffscreen) || progress >= 1.25) {
+        orb.escaped = true;
         orb.missed = true;
         this.resetCombo();
         this.pulseOrbs.splice(i, 1);
@@ -412,10 +436,31 @@ export class GameEngine {
 
     for (let i = this.solarNodes.length - 1; i >= 0; i--) {
       const node = this.solarNodes[i];
-      const elapsed = now - node.spawnTime;
 
-      // Sine wave drift
-      node.currentPos.y = node.centerPos.y + Math.sin(elapsed / 1000 * node.frequency) * node.amplitude;
+      // 1. Telegraph Phase at entry border
+      if (node.telegraphRemaining > 0) {
+        node.telegraphRemaining = Math.max(0, node.telegraphRemaining - dt * 1000);
+        node.currentPos.x = node.spawnX;
+        node.currentPos.y = node.spawnY;
+        node.progress = 0;
+        continue;
+      }
+
+      // 2. Cross-Screen Traversal Phase with smooth perpendicular sine sway
+      const activeElapsed = now - (node.spawnTime + node.telegraphDuration);
+      const progress = Math.max(0, activeElapsed / node.lifetime);
+      node.progress = progress;
+
+      const baseX = node.spawnX + (node.exitX - node.spawnX) * progress;
+      const baseY = node.spawnY + (node.exitY - node.spawnY) * progress;
+
+      const perpX = -node.vy;
+      const perpY = node.vx;
+      const sway = Math.sin((activeElapsed / 1000) * node.frequency * Math.PI * 2) * node.amplitude;
+      const curve = Math.sin(Math.min(1.0, progress) * Math.PI) * node.arcOffset;
+
+      node.currentPos.x = baseX + perpX * (curve + sway);
+      node.currentPos.y = baseY + perpY * (curve + sway);
 
       // Check hold
       const holdRes = this.collision.checkSolarNodeHold(node, leftWrist, rightWrist, dt * 1000, canvasWidth, canvasHeight);
@@ -426,7 +471,7 @@ export class GameEngine {
       }
 
       if (holdRes.isCompleted) {
-        const points = 150 * this.stats.combo;
+        const points = 300 * this.stats.combo;
         this.stats.score += points;
         this.stats.solarHolds++;
         this.incrementCombo();
@@ -446,9 +491,21 @@ export class GameEngine {
         continue;
       }
 
-      // Check timeout
-      if (elapsed > node.lifetime && !node.isCompleted) {
+      // Check escape: passed opposite border
+      const nodePixelX = node.currentPos.x * canvasWidth;
+      const nodePixelY = node.currentPos.y * canvasHeight;
+      const r = node.radius;
+
+      const isOffscreen =
+        nodePixelX + r < 0 ||
+        nodePixelX - r > canvasWidth ||
+        nodePixelY + r < 0 ||
+        nodePixelY - r > canvasHeight;
+
+      if ((progress >= 1.0 && isOffscreen) || progress >= 1.25) {
+        node.escaped = true;
         node.missed = true;
+        this.resetCombo();
         this.solarNodes.splice(i, 1);
         if (this.isTutorialMode && this.tutorialStep === 'hold') {
           setTimeout(() => this.spawnTutorialTarget(), 600);

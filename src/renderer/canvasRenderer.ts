@@ -150,54 +150,150 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
+  /**
+   * Renders a pulsing glowing edge chevron at the entry border pointing along (vx, vy).
+   */
+  private renderEdgeTelegraph(
+    ctx: CanvasRenderingContext2D,
+    spawnX: number,
+    spawnY: number,
+    vx: number,
+    vy: number,
+    color: string,
+    telegraphRemaining: number,
+    telegraphDuration: number,
+    width: number,
+    height: number
+  ) {
+    const edgePadding = 26;
+    const cx = Math.max(edgePadding, Math.min(width - edgePadding, spawnX * width));
+    const cy = Math.max(edgePadding, Math.min(height - edgePadding, spawnY * height));
+
+    const angle = Math.atan2(vy, vx);
+    const pulse = 0.5 + 0.5 * Math.sin((telegraphRemaining / telegraphDuration) * Math.PI * 6);
+    const alpha = 0.5 + 0.5 * pulse;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+
+    // 1. Glowing Radar Pip / Origin Anchor
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Double Neon Directional Chevron pointing along (vx, vy)
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    this.applyShadow(ctx, color, 14);
+
+    // Rear Chevron
+    ctx.beginPath();
+    ctx.moveTo(-10, -13);
+    ctx.lineTo(6, 0);
+    ctx.lineTo(-10, 13);
+    ctx.stroke();
+
+    // Leading Chevron (animated advance)
+    const advance = (1 - telegraphRemaining / telegraphDuration) * 5;
+    ctx.beginPath();
+    ctx.moveTo(-1 + advance, -9);
+    ctx.lineTo(13 + advance, 0);
+    ctx.lineTo(-1 + advance, 9);
+    ctx.stroke();
+
+    // 3. Faint Trajectory Inbound Line Hint
+    ctx.strokeStyle = `${color}44`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath();
+    ctx.moveTo(16, 0);
+    ctx.lineTo(80, 0);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
   private renderPulseOrbs(ctx: CanvasRenderingContext2D, engine: GameEngine, width: number, height: number) {
     for (const orb of engine.pulseOrbs) {
+      if (orb.isHit || orb.missed || orb.escaped) continue;
+
+      // 1. Edge Telegraph Phase: Render pulsing edge chevron before entry
+      if (orb.telegraphRemaining > 0) {
+        this.renderEdgeTelegraph(
+          ctx,
+          orb.spawnX,
+          orb.spawnY,
+          orb.vx,
+          orb.vy,
+          orb.color,
+          orb.telegraphRemaining,
+          orb.telegraphDuration,
+          width,
+          height
+        );
+        continue;
+      }
+
+      // 2. Active Cross-Screen Traversal Phase
       const x = orb.currentPos.x * width;
       const y = orb.currentPos.y * height;
-      const originX = orb.originPos.x * width;
-      const originY = orb.originPos.y * height;
-      const currentRadius = orb.radius * orb.scale;
+      const currentRadius = orb.radius;
 
       ctx.save();
 
-      // 1. Approaching Trajectory Vector Line
-      ctx.strokeStyle = `${orb.color}33`;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 6]);
-      ctx.beginPath();
-      ctx.moveTo(originX, originY);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      // 3. Comet Motion Tail trailing behind (-vx, -vy)
+      const tailCount = 4;
+      const tailSpacing = currentRadius * 0.45;
+      for (let t = tailCount; t >= 1; t--) {
+        const distBack = t * tailSpacing;
+        const tailX = x - orb.vx * distBack;
+        const tailY = y - orb.vy * distBack;
+        const factor = 1 - t / (tailCount + 1);
+        const tailR = currentRadius * (0.3 + factor * 0.55);
 
-      // 2. Outer Shrinking Timing Ring
-      const ringRadius = currentRadius * orb.timingRingScale;
-      const isHitWindow = orb.scale >= 0.75;
+        ctx.save();
+        ctx.globalAlpha = factor * 0.45;
+        ctx.fillStyle = orb.color;
+        this.applyShadow(ctx, orb.color, 8);
+        ctx.beginPath();
+        ctx.arc(tailX, tailY, tailR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
 
-      ctx.strokeStyle = isHitWindow ? '#ffffff' : orb.color;
-      ctx.lineWidth = isHitWindow ? 3.5 : 2;
-      this.applyShadow(ctx, isHitWindow ? '#ffffff' : orb.color, isHitWindow ? 16 : 8);
-
-      ctx.beginPath();
-      ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // 3. Central Target Sphere with Radial Glow
-      const grad = ctx.createRadialGradient(x - currentRadius * 0.3, y - currentRadius * 0.3, currentRadius * 0.1, x, y, currentRadius);
+      // 4. Central Target Sphere with Radial Glow
+      const grad = ctx.createRadialGradient(
+        x - orb.vx * currentRadius * 0.25,
+        y - orb.vy * currentRadius * 0.25,
+        currentRadius * 0.15,
+        x,
+        y,
+        currentRadius
+      );
       grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.5, orb.color);
-      grad.addColorStop(1, `${orb.color}22`);
+      grad.addColorStop(0.45, orb.color);
+      grad.addColorStop(1, `${orb.color}33`);
 
       ctx.fillStyle = grad;
-      this.applyShadow(ctx, orb.color, 18);
+      this.applyShadow(ctx, orb.color, 16);
       ctx.beginPath();
       ctx.arc(x, y, currentRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // 4. Center Target Crosshair / Reticle
+      // 5. Bright Core Pip & Reticle Crosshair
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x, y, currentRadius * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
-      const crossSize = Math.max(6, currentRadius * 0.4);
+      const crossSize = Math.max(6, currentRadius * 0.45);
       ctx.beginPath();
       ctx.moveTo(x - crossSize, y);
       ctx.lineTo(x + crossSize, y);
@@ -211,13 +307,42 @@ export class CanvasRenderer {
 
   private renderSolarNodes(ctx: CanvasRenderingContext2D, engine: GameEngine, width: number, height: number) {
     for (const node of engine.solarNodes) {
+      if (node.isCompleted || node.missed || node.escaped) continue;
+
+      // 1. Edge Telegraph Phase: Render golden pulsing edge chevron
+      if (node.telegraphRemaining > 0) {
+        this.renderEdgeTelegraph(
+          ctx,
+          node.spawnX,
+          node.spawnY,
+          node.vx,
+          node.vy,
+          '#ffd700',
+          node.telegraphRemaining,
+          node.telegraphDuration,
+          width,
+          height
+        );
+        continue;
+      }
+
       const x = node.currentPos.x * width;
       const y = node.currentPos.y * height;
       const r = node.radius;
 
       ctx.save();
 
-      // 1. Rotating Golden Solar Flares
+      // 2. Faint Dotted Path Hint Line Ahead Showing Drift Direction
+      ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + node.vx * 80, y + node.vy * 80);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 3. Rotating Golden Solar Flares
       const time = performance.now() / 800;
       ctx.save();
       ctx.translate(x, y);
@@ -227,19 +352,19 @@ export class CanvasRenderer {
       ctx.strokeRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4);
       ctx.restore();
 
-      // 2. Ambient Glowing Core
+      // 4. Ambient Glowing Core
       const grad = ctx.createRadialGradient(x, y, r * 0.2, x, y, r);
       grad.addColorStop(0, '#fffbeb');
       grad.addColorStop(0.4, '#f59e0b');
       grad.addColorStop(1, 'rgba(245, 158, 11, 0.1)');
 
       ctx.fillStyle = grad;
-      this.applyShadow(ctx, '#ffd700', 24);
+      this.applyShadow(ctx, '#ffd700', 20);
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
 
-      // 3. Circular Charge Progress Bar (0 -> 100%)
+      // 5. Circular Charge Progress Bar (0 -> 100%)
       const progress = node.currentHoldTime / node.holdDurationRequired;
       if (progress > 0) {
         ctx.strokeStyle = '#39ff14';
@@ -256,7 +381,7 @@ export class CanvasRenderer {
         ctx.stroke();
       }
 
-      // 4. "HOLD" Label
+      // 6. "HOLD" Label
       ctx.font = 'bold 13px Orbitron, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
