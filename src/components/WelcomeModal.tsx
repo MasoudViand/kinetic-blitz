@@ -85,7 +85,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ onClose }) => {
                 Free & Open Source
               </h4>
               <p className="text-[10px] sm:text-[11px] text-gray-400 mt-1 leading-relaxed">
-                Kinetic Blitz is open source under the MIT License. Built with React 18, TypeScript, Vite, Tailwind CSS, Google MediaPipe Tasks-Vision, and Web Audio API. Inspect the code, customize mechanics, or contribute!
+                Kinetic Blitz is open source under the AGPL-3.0 License. Built with React 18, TypeScript, Vite, Tailwind CSS, Google MediaPipe Tasks-Vision, and Web Audio API. Inspect the code, customize mechanics, or contribute!
               </p>
             </div>
           </div>
