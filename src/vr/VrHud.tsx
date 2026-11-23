@@ -1,14 +1,43 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { vrEngine } from './vrEngine';
+import { vrUiRegistry } from './vrUi';
+import { VrButton } from './VrButton';
 
-export const VrHud: React.FC = () => {
-  const meshRef = useRef<THREE.Mesh>(null);
+interface VrHudProps {
+  onExitSession?: () => void;
+}
+
+export const VrHud: React.FC<VrHudProps> = ({ onExitSession }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const planeMeshRef = useRef<THREE.Mesh>(null);
   const textureRef = useRef<THREE.CanvasTexture | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastDrawnTime = useRef<number>(0);
   const { camera } = useThree();
+
+  const [engineState, setEngineState] = useState(vrEngine.state);
+
+  // Sync onExitSession with engine
+  useEffect(() => {
+    if (onExitSession) {
+      vrEngine.onExitSession = onExitSession;
+    }
+    return () => {
+      vrEngine.onExitSession = undefined;
+    };
+  }, [onExitSession]);
+
+  // Register HUD plane for laser raycaster aiming detection
+  useEffect(() => {
+    if (planeMeshRef.current) {
+      vrUiRegistry.setHudPlane(planeMeshRef.current);
+    }
+    return () => {
+      vrUiRegistry.setHudPlane(null);
+    };
+  }, []);
 
   // Create HUD offscreen canvas and texture once
   useEffect(() => {
@@ -80,7 +109,7 @@ export const VrHud: React.FC = () => {
 
       ctx.fillStyle = '#00f0ff';
       ctx.font = '18px monospace';
-      ctx.fillText('[Thumbstick: Recenter Center   •   B / Y: Pause]', width / 2, 430);
+      ctx.fillText('Aim laser & pull Trigger to click menus   •   Thumbstick: Recenter', width / 2, 430);
 
       texture.needsUpdate = true;
       return;
@@ -115,50 +144,10 @@ export const VrHud: React.FC = () => {
         170
       );
 
-      // Action control badges
-      const btnY = 240;
-      const btnW = 270;
-      const btnH = 68;
-      const gap = 30;
-      const startX = (width - (btnW * 3 + gap * 2)) / 2;
-
-      // 1. Resume (A / X)
-      ctx.fillStyle = '#00f0ff';
-      ctx.beginPath();
-      ctx.roundRect(startX, btnY, btnW, btnH, 14);
-      ctx.fill();
-
-      ctx.fillStyle = '#080e1a';
-      ctx.font = '900 24px monospace';
-      ctx.fillText('[A / X] RESUME', startX + btnW / 2, btnY + 22);
-
-      // 2. Restart (Grip)
-      ctx.fillStyle = '#f59e0b';
-      ctx.beginPath();
-      ctx.roundRect(startX + btnW + gap, btnY, btnW, btnH, 14);
-      ctx.fill();
-
-      ctx.fillStyle = '#080e1a';
-      ctx.font = '900 24px monospace';
-      ctx.fillText('[GRIP] RESTART', startX + btnW + gap + btnW / 2, btnY + 22);
-
-      // 3. Stop & Exit (B / Y)
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
-      ctx.beginPath();
-      ctx.roundRect(startX + (btnW + gap) * 2, btnY, btnW, btnH, 14);
-      ctx.fill();
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.fillStyle = '#f87171';
-      ctx.font = '900 24px monospace';
-      ctx.fillText('[B / Y] STOP & EXIT', startX + (btnW + gap) * 2 + btnW / 2, btnY + 22);
-
-      // Footer guidance
+      // Clean footer guidance (Buttons are 3D meshes rendered in front)
       ctx.fillStyle = '#94a3b8';
       ctx.font = '18px monospace';
-      ctx.fillText('Stand inside the floor circle   •   Click Thumbstick to Recenter', width / 2, 380);
+      ctx.fillText('Point controller & pull Trigger to select   •   Thumbstick: Recenter', width / 2, 380);
 
       texture.needsUpdate = true;
       return;
@@ -212,42 +201,11 @@ export const VrHud: React.FC = () => {
       ctx.fillText(`MAX COMBO: x${vrEngine.stats.maxCombo}`, leftX, rowY);
       ctx.fillText(`CALORIES: ~${vrEngine.stats.caloriesBurned} kcal`, rightX, rowY);
 
-      // Clean Controller Actions (Replaced "Punch to Restart")
-      const btnY = 360;
-      const btnW = 320;
-      const btnH = 64;
-      const gap = 40;
-      const startX = (width - (btnW * 2 + gap)) / 2;
-
-      // Play Again Pill
-      ctx.fillStyle = '#00f0ff';
-      ctx.beginPath();
-      ctx.roundRect(startX, btnY, btnW, btnH, 14);
-      ctx.fill();
-
-      ctx.fillStyle = '#070d1a';
+      // Clean footer subtext (Buttons are 3D meshes rendered in front)
       ctx.textAlign = 'center';
-      ctx.font = '900 24px monospace';
-      ctx.fillText('[A / X] PLAY AGAIN', startX + btnW / 2, btnY + 20);
-
-      // Back to Menu Pill
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
-      ctx.beginPath();
-      ctx.roundRect(startX + btnW + gap, btnY, btnW, btnH, 14);
-      ctx.fill();
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.fillStyle = '#fca5a5';
-      ctx.textAlign = 'center';
-      ctx.font = '900 24px monospace';
-      ctx.fillText('[B / Y] BACK TO MENU', startX + btnW + gap + btnW / 2, btnY + 20);
-
-      // Subtext
       ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
       ctx.font = '16px monospace';
-      ctx.fillText('Press controller buttons (or tap screen with hand)', width / 2, 445);
+      ctx.fillText('Point controller & pull Trigger to select   •   Thumbstick: Recenter', width / 2, 445);
 
       texture.needsUpdate = true;
       return;
@@ -365,7 +323,7 @@ export const VrHud: React.FC = () => {
     ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
     ctx.font = 'bold 16px monospace';
     ctx.fillText(
-      '[B / Y] Pause   •   [Thumbstick] Recenter   •   [A / X] Recalibrate',
+      'Aim at Pause button or press B / Y   •   Thumbstick: Recenter',
       width / 2,
       445
     );
@@ -373,9 +331,10 @@ export const VrHud: React.FC = () => {
     texture.needsUpdate = true;
   }, []);
 
-  // Subscribe to engine HUD dirty events
+  // Subscribe to engine HUD dirty and state change events
   useEffect(() => {
     vrEngine.onHudDirty = () => {
+      setEngineState(vrEngine.state);
       drawHUD();
     };
     drawHUD();
@@ -393,7 +352,7 @@ export const VrHud: React.FC = () => {
     }
 
     // Position HUD ahead of player in calibrated corridor
-    if (meshRef.current) {
+    if (groupRef.current) {
       const isPaused = vrEngine.state === 'paused';
       const isSummary = vrEngine.state === 'game_over' || vrEngine.state === 'summary';
 
@@ -401,34 +360,113 @@ export const VrHud: React.FC = () => {
       const localZ = isPaused ? -1.5 : isSummary ? -1.6 : -1.8;
 
       const localHud = new THREE.Vector3(0, localY, localZ);
-      vrEngine.localToWorld(localHud, meshRef.current.position);
+      vrEngine.localToWorld(localHud, groupRef.current.position);
 
-      meshRef.current.rotation.y = vrEngine.calibration.forwardYaw;
-      meshRef.current.rotation.x = isPaused ? 0.06 : isSummary ? 0.08 : 0.12;
+      groupRef.current.rotation.y = vrEngine.calibration.forwardYaw;
+      groupRef.current.rotation.x = isPaused ? 0.06 : isSummary ? 0.08 : 0.12;
     }
   });
 
+  const isPaused = engineState === 'paused';
+  const isSummary = engineState === 'game_over' || engineState === 'summary';
+  const isPlaying = engineState === 'playing';
+
   return (
-    <mesh
-      ref={meshRef}
-      position={[0, 1.8, -1.8]}
-      onClick={() => {
-        if (vrEngine.state === 'paused') {
-          vrEngine.resumeGame();
-        } else if (vrEngine.state === 'game_over' || vrEngine.state === 'summary') {
-          vrEngine.restartGame(camera);
-        }
-      }}
-    >
-      <planeGeometry args={[1.6, 0.8]} />
-      {textureRef.current && (
-        <meshBasicMaterial
-          map={textureRef.current}
-          transparent
-          side={THREE.DoubleSide}
-          depthWrite={false}
+    <group ref={groupRef} position={[0, 1.8, -1.8]}>
+      {/* Background HUD Canvas Display */}
+      <mesh ref={planeMeshRef}>
+        <planeGeometry args={[1.6, 0.8]} />
+        {textureRef.current && (
+          <meshBasicMaterial
+            map={textureRef.current}
+            transparent
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        )}
+      </mesh>
+
+      {/* 1. PLAYING: Clickable 3D PAUSE Button */}
+      {isPlaying && (
+        <VrButton
+          id="hud-pause"
+          label="PAUSE"
+          width={0.24}
+          height={0.075}
+          position={[0.56, 0.28, 0.02]}
+          color="#f59e0b"
+          hoverColor="#fbbf24"
+          onClick={() => vrEngine.pauseGame()}
         />
       )}
-    </mesh>
+
+      {/* 2. PAUSED: Clickable 3D RESUME, RESTART, STOP & EXIT Buttons */}
+      {isPaused && (
+        <>
+          <VrButton
+            id="pause-resume"
+            label="RESUME"
+            width={0.36}
+            height={0.11}
+            position={[-0.44, -0.12, 0.02]}
+            color="#00f0ff"
+            hoverColor="#38bdf8"
+            onClick={() => vrEngine.resumeGame()}
+          />
+          <VrButton
+            id="pause-restart"
+            label="RESTART"
+            width={0.36}
+            height={0.11}
+            position={[0, -0.12, 0.02]}
+            color="#f59e0b"
+            hoverColor="#fbbf24"
+            onClick={() => vrEngine.restartGame(camera)}
+          />
+          <VrButton
+            id="pause-exit"
+            label="STOP & EXIT"
+            width={0.36}
+            height={0.11}
+            position={[0.44, -0.12, 0.02]}
+            color="#ef4444"
+            hoverColor="#f87171"
+            onClick={() => {
+              vrEngine.state = 'idle';
+              vrEngine.onExitSession?.();
+            }}
+          />
+        </>
+      )}
+
+      {/* 3. SUMMARY: Clickable 3D PLAY AGAIN and BACK TO MENU Buttons */}
+      {isSummary && (
+        <>
+          <VrButton
+            id="summary-play-again"
+            label="PLAY AGAIN"
+            width={0.44}
+            height={0.11}
+            position={[-0.26, -0.22, 0.02]}
+            color="#00f0ff"
+            hoverColor="#38bdf8"
+            onClick={() => vrEngine.restartGame(camera)}
+          />
+          <VrButton
+            id="summary-menu"
+            label="BACK TO MENU"
+            width={0.44}
+            height={0.11}
+            position={[0.26, -0.22, 0.02]}
+            color="#ef4444"
+            hoverColor="#f87171"
+            onClick={() => {
+              vrEngine.state = 'idle';
+              vrEngine.onExitSession?.();
+            }}
+          />
+        </>
+      )}
+    </group>
   );
 };

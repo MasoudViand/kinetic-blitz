@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 export type VrPhase = 'CALIBRATING' | 'PLAYING' | 'PAUSED' | 'SUMMARY';
 export type VrGameState = 'idle' | 'calibrating' | 'countdown' | 'playing' | 'paused' | 'game_over' | 'summary';
+export type VrOrbTier = 'low' | 'mid' | 'high';
 
 export interface VrHandInfo {
   handedness: 'left' | 'right';
@@ -18,6 +19,7 @@ export interface VrBlitzOrb {
   id: string;
   kind: 'blitz_orb';
   color: 'cyan' | 'magenta';
+  tier: VrOrbTier;
   localPos: THREE.Vector3;
   worldPos: THREE.Vector3;
   spawnLocal: THREE.Vector3;
@@ -37,17 +39,13 @@ export interface VrBlitzOrb {
 export interface VrVoltNode {
   id: string;
   kind: 'volt_node';
-  phase: 'approach' | 'glide' | 'expired';
   localPos: THREE.Vector3;
   worldPos: THREE.Vector3;
   spawnLocal: THREE.Vector3;
-  glideY: number;
-  glideStartX: number;
-  glideEndX: number;
-  approachDuration: number; // ~1800ms to reach z = -0.42m
-  glideDuration: number;    // 4000ms across chest at locked z = -0.42m
-  approachElapsed: number;
-  glideElapsed: number;
+  targetLocal: THREE.Vector3;
+  exitLocal: THREE.Vector3;
+  vzBase: number;           // base forward velocity in m/s
+  vxBase: number;           // base lateral velocity in m/s
   radius: number;
   holdProgress: number;     // 0..1
   holdDurationMs: number;   // 450ms

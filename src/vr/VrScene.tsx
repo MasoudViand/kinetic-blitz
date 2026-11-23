@@ -77,6 +77,14 @@ const VrGameLoop: React.FC<{ mode: GameMode; difficulty: DifficultyLevel; onExit
       onExitSession?.();
     };
 
+    vrEngine.onExitSession = () => {
+      const activeSession = gl.xr.getSession();
+      if (activeSession) {
+        activeSession.end().catch(() => {});
+      }
+      onExitSession?.();
+    };
+
     // Bare-hand tap fallback during SUMMARY when no controllers are connected
     const handleSelectStart = (e: XRInputSourceEvent) => {
       if (vrEngine.phase === 'SUMMARY' && !e.inputSource.gamepad) {
@@ -200,7 +208,7 @@ export const VrScene: React.FC<VrSceneProps> = ({ mode, difficulty, onExitSessio
           <VrTargets />
           <VrTether />
           <VrParticles />
-          <VrHud />
+          <VrHud onExitSession={onExitSession} />
         </XR>
       </Canvas>
     </div>

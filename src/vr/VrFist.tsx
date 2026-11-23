@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useXRInputSourceStateContext, XRSpace } from '@react-three/xr';
 import { vrEngine } from './vrEngine';
+import { VrLaserRay } from './VrLaserPointer';
 
 interface VrFistProps {
   handedness: 'left' | 'right';
@@ -64,51 +65,60 @@ export const VrFist: React.FC<VrFistProps> = ({ handedness }) => {
     'target-ray-space';
 
   return (
-    <XRSpace space={resolvedSpace}>
-      <group ref={groupRef}>
-        {/* Core Knuckle Orb */}
-        <mesh position={[0, 0, 0]}>
-          <sphereGeometry args={[0.045, 16, 16]} />
-          <meshBasicMaterial color={colorHex} />
-        </mesh>
+    <>
+      <XRSpace space={resolvedSpace}>
+        <group ref={groupRef}>
+          {/* Core Knuckle Orb */}
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[0.045, 16, 16]} />
+            <meshBasicMaterial color={colorHex} />
+          </mesh>
 
-        {/* Outer Additive Glow Shell 1 */}
-        <mesh position={[0, 0, 0]}>
-          <sphereGeometry args={[0.065, 16, 16]} />
-          <meshBasicMaterial
-            color={colorHex}
-            transparent
-            opacity={0.35}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
+          {/* Outer Additive Glow Shell 1 */}
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[0.065, 16, 16]} />
+            <meshBasicMaterial
+              color={colorHex}
+              transparent
+              opacity={0.35}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
 
-        {/* Outer Additive Glow Shell 2 */}
-        <mesh position={[0, 0, 0]}>
-          <sphereGeometry args={[0.085, 12, 12]} />
-          <meshBasicMaterial
-            color={colorHex}
-            transparent
-            opacity={0.15}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
+          {/* Outer Additive Glow Shell 2 */}
+          <mesh position={[0, 0, 0]}>
+            <sphereGeometry args={[0.085, 12, 12]} />
+            <meshBasicMaterial
+              color={colorHex}
+              transparent
+              opacity={0.15}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
 
-        {/* Knuckle Energy Ring */}
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.07, 0.007, 8, 24]} />
-          <meshBasicMaterial
-            color={colorHex}
-            transparent
-            opacity={0.8}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
-      </group>
-    </XRSpace>
+          {/* Knuckle Energy Ring */}
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.07, 0.007, 8, 24]} />
+            <meshBasicMaterial
+              color={colorHex}
+              transparent
+              opacity={0.8}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+        </group>
+      </XRSpace>
+
+      {/* Controller Laser Pointer Ray in targetRaySpace */}
+      {state?.inputSource?.targetRaySpace && (
+        <XRSpace space={state.inputSource.targetRaySpace}>
+          <VrLaserRay handedness={handedness} inputSource={state.inputSource} />
+        </XRSpace>
+      )}
+    </>
   );
 };
 

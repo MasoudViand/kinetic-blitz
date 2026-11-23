@@ -4,6 +4,7 @@ import { soundEngine } from '../audio/soundEngine';
 import {
   VrPhase,
   VrGameState,
+  VrOrbTier,
   VrHandInfo,
   VrBlitzOrb,
   VrVoltNode,
@@ -95,10 +96,11 @@ export class VrEngine {
   private countdownElapsed: number = 0;
   private lastCountdownBeep: number = -1;
 
-  // Spawner timers
+  // Spawner timers & anti-repetition
   private nextTargetSpawnTime: number = 0;
   private nextLaserSpawnTime: number = 6000;
   private orbCounter: number = 0;
+  private recentOrbTiers: VrOrbTier[] = [];
 
   // Particle pool for zero-GC hit explosions
   public static readonly MAX_PARTICLES = 160;
@@ -109,6 +111,7 @@ export class VrEngine {
   public onHudDirty?: () => void;
   public onStateChange?: (state: VrGameState) => void;
   public onTargetsListChanged?: () => void; // Triggered when targets added/removed
+  public onExitSession?: () => void;
 
   constructor() {
     this.initParticlePool();
@@ -212,6 +215,7 @@ export class VrEngine {
     this.blitzOrbs = [];
     this.voltNodes = [];
     this.laserBarriers = [];
+    this.recentOrbTiers = [];
     this.onTargetsListChanged?.();
 
     const durationMap: Record<GameMode, number> = {
@@ -343,33 +347,85 @@ export class VrEngine {
 
   /**
    * Spawn incoming Blitz Orb along depth corridor (Z = -5.5m -> -0.45m)
+   * with ergonomic 3-tier heights and anti-repetition guards.
    */
   private spawnBlitzOrb() {
     const headY = this.calibration.headY;
 
-    // 1. Guaranteed reachable punch target in front of player
+    // 1. Anti-Repetition Tier Selection (Disallow > 2 consecutive of same tier)
+    const candidateTiers: VrOrbTier[] = ['low', 'mid', 'high'];
+    let allowedTiers = [...candidateTiers];
+    if (
+      this.recentOrbTiers.length >= 2 &&
+      this.recentOrbTiers[0] === this.recentOrbTiers[1]
+    ) {
+      const forbidden = this.recentOrbTiers[0];
+      allowedTiers = allowedTiers.filter((t) => t !== forbidden);
+    }
+
+    // Weighted selection: Low ~30%, Mid ~40%, High ~30%
+    const weights: Record<VrOrbTier, number> = {
+      low: 0.30,
+      mid: 0.40,
+      high: 0.30,
+    };
+
+    let totalWeight = 0;
+    for (const t of allowedTiers) {
+      totalWeight += weights[t];
+    }
+
+    let r = Math.random() * totalWeight;
+    let chosenTier: VrOrbTier = allowedTiers[0];
+    for (const t of allowedTiers) {
+      if (r < weights[t]) {
+        chosenTier = t;
+        break;
+      }
+      r -= weights[t];
+    }
+
+    this.recentOrbTiers.push(chosenTier);
+    if (this.recentOrbTiers.length > 2) {
+      this.recentOrbTiers.shift();
+    }
+
+    // Heights relative to headY, clamped >= 0.65m floor height:
+    // LOW (Body Hook): [headY - 0.62m, headY - 0.46m]
+    // MID (Chest / Jab): [headY - 0.38m, headY - 0.14m]
+    // HIGH (Overhead / Upper Guard): [headY - 0.02m, headY + 0.24m]
+    let targetY: number;
+    if (chosenTier === 'low') {
+      targetY = THREE.MathUtils.randFloat(headY - 0.62, headY - 0.46);
+    } else if (chosenTier === 'mid') {
+      targetY = THREE.MathUtils.randFloat(headY - 0.38, headY - 0.14);
+    } else {
+      targetY = THREE.MathUtils.randFloat(headY - 0.02, headY + 0.24);
+    }
+    targetY = Math.max(0.65, targetY);
+
+    // Reachable punch target in front of player
     const targetLocal = new THREE.Vector3(
       THREE.MathUtils.randFloat(-0.38, 0.38),
-      THREE.MathUtils.randFloat(headY - 0.40, headY + 0.08),
+      targetY,
       -0.45 // Comfortable arm-reach punch distance
     );
 
-    // 2. Spawn point 5.5m down the corridor with slight lateral flare
+    // Spawn point 5.5m down the corridor; height aligned with chosen tier with subtle ±0.15m curve
     const spawnLocal = new THREE.Vector3(
       targetLocal.x * 2.2 + THREE.MathUtils.randFloat(-0.4, 0.4),
-      targetLocal.y + THREE.MathUtils.randFloat(-0.25, 0.35),
+      targetY + THREE.MathUtils.randFloat(-0.15, 0.15),
       -5.5
     );
 
-    // 3. Exit point passing behind shoulders
+    // Exit point passing behind shoulders
     const exitLocal = new THREE.Vector3(
       targetLocal.x * 1.1 + THREE.MathUtils.randFloat(-0.1, 0.1),
-      targetLocal.y,
+      targetY,
       0.35
     );
 
-    // 4. Solve quadratic Bézier control point so curve passes right through targetLocal at t_hit
-    // Distance from z=-5.5 to z=-0.45 is 5.05m; total z is 5.85m -> t_hit approx 0.86
+    // Solve quadratic Bézier control point so curve passes right through targetLocal at t_hit
     const tHit = 0.86;
     const invT = 1 - tHit;
     const denom = 2 * invT * tHit;
@@ -398,6 +454,7 @@ export class VrEngine {
       id: `vr-orb-${Date.now()}-${Math.random()}`,
       kind: 'blitz_orb',
       color,
+      tier: chosenTier,
       localPos: spawnLocal.clone(),
       worldPos: initialWorld,
       spawnLocal,
@@ -418,36 +475,60 @@ export class VrEngine {
   }
 
   /**
-   * Spawn incoming Volt Node: approaches from 5.5m, locks at z = -0.42m, glides across chest
+   * Spawn incoming Volt Node along a chest-height diagonal lane.
+   * Continues smoothly through arm reach past the player (never stopping at eye level).
    */
   private spawnVoltNode() {
     if (this.voltNodes.length >= 1) return;
 
     const headY = this.calibration.headY;
-    const glideY = THREE.MathUtils.randFloat(headY - 0.35, headY + 0.05);
+    // Chest height: [headY - 0.36m, headY - 0.14m]
+    const spawnY = THREE.MathUtils.randFloat(headY - 0.36, headY - 0.14);
 
-    // Decide glide direction (left-to-right or right-to-left)
+    // Start on either side: [-0.75m, -0.45m] or [0.45m, 0.75m]
     const fromLeft = Math.random() < 0.5;
-    const glideStartX = fromLeft ? -0.35 : 0.35;
-    const glideEndX = fromLeft ? 0.35 : -0.35;
+    const startX = fromLeft
+      ? THREE.MathUtils.randFloat(-0.75, -0.45)
+      : THREE.MathUtils.randFloat(0.45, 0.75);
 
-    const spawnLocal = new THREE.Vector3(glideStartX, glideY, -5.5);
+    const spawnLocal = new THREE.Vector3(startX, spawnY, -5.5);
+
+    // Reachable side-chest target at z = -0.45m; avoid dead-center [-0.10m, +0.10m]
+    let targetX = THREE.MathUtils.randFloat(-0.38, 0.38);
+    if (Math.abs(targetX) < 0.10) {
+      targetX = targetX >= 0 ? 0.18 : -0.18;
+    }
+    const targetY = THREE.MathUtils.clamp(spawnY + THREE.MathUtils.randFloat(-0.04, 0.04), 0.75, headY + 0.1);
+    const targetLocal = new THREE.Vector3(targetX, targetY, -0.45);
+
+    // Exit point continuing through to z = +0.40m
+    const slopeX = (targetLocal.x - spawnLocal.x) / (targetLocal.z - spawnLocal.z);
+    const exitX = targetLocal.x + slopeX * (0.40 - targetLocal.z);
+    const exitLocal = new THREE.Vector3(exitX, targetY, 0.40);
+
+    // Approach duration by difficulty
+    const durationMap: Record<DifficultyLevel, number> = {
+      easy: 2400,
+      medium: 2000,
+      hard: 1600,
+    };
+    const approachDuration = durationMap[this.difficulty];
+    const distZ = Math.abs(targetLocal.z - spawnLocal.z); // 5.05m
+    const vzBase = (distZ / approachDuration) * 1000;      // m/s
+    const vxBase = ((targetLocal.x - spawnLocal.x) / approachDuration) * 1000; // m/s
+
     const initialWorld = this.localToWorld(spawnLocal);
 
     this.voltNodes.push({
       id: `vr-volt-${Date.now()}-${Math.random()}`,
       kind: 'volt_node',
-      phase: 'approach',
       localPos: spawnLocal.clone(),
       worldPos: initialWorld,
       spawnLocal,
-      glideY,
-      glideStartX,
-      glideEndX,
-      approachDuration: 1800, // 1.8s approach
-      glideDuration: 4000,    // 4.0s glide at arm's reach
-      approachElapsed: 0,
-      glideElapsed: 0,
+      targetLocal,
+      exitLocal,
+      vzBase,
+      vxBase,
       radius: 0.13,
       holdProgress: 0,
       holdDurationMs: 450,
@@ -707,106 +788,98 @@ export class VrEngine {
       }
     }
 
-    // 4. Update Volt Nodes (Approach -> Lock at z = -0.42m -> Lateral Glide)
+    // 4. Update Volt Nodes (Diagonal Chest Pass-Through with Dynamic Speed & Gravity Brake)
     for (let i = this.voltNodes.length - 1; i >= 0; i--) {
       const node = this.voltNodes[i];
 
-      if (node.phase === 'approach') {
-        node.approachElapsed += dtMs;
-        const tApp = Math.min(1.0, node.approachElapsed / node.approachDuration);
+      // Sticky hysteresis grab radius
+      const grabRadius = node.radius * 1.4;
+      const maintainRadius = node.radius * 1.9;
 
-        // Lerp from -5.5m to -0.42m
-        node.localPos.x = node.glideStartX;
-        node.localPos.y = node.glideY;
-        node.localPos.z = THREE.MathUtils.lerp(-5.5, -0.42, tApp);
-
-        if (tApp >= 1.0) {
-          node.phase = 'glide';
-          node.localPos.z = -0.42; // Locked at arm's reach
+      let touchingHand: VrHandInfo | null = null;
+      if (node.isHeld && node.heldHand) {
+        const hand = this.hands[node.heldHand];
+        if (hand.active && hand.position.distanceTo(node.worldPos) <= maintainRadius) {
+          touchingHand = hand;
         }
-      } else if (node.phase === 'glide') {
-        // Sticky hysteresis grab radius
-        const grabRadius = node.radius * 1.4;
-        const maintainRadius = node.radius * 1.9;
-
-        let touchingHand: VrHandInfo | null = null;
-        if (node.isHeld && node.heldHand) {
-          const hand = this.hands[node.heldHand];
-          if (hand.active && hand.position.distanceTo(node.worldPos) <= maintainRadius) {
-            touchingHand = hand;
-          }
-        } else {
-          if (this.hands.left.active && this.hands.left.position.distanceTo(node.worldPos) <= grabRadius) {
-            touchingHand = this.hands.left;
-          } else if (this.hands.right.active && this.hands.right.position.distanceTo(node.worldPos) <= grabRadius) {
-            touchingHand = this.hands.right;
-          }
+      } else {
+        if (this.hands.left.active && this.hands.left.position.distanceTo(node.worldPos) <= grabRadius) {
+          touchingHand = this.hands.left;
+        } else if (this.hands.right.active && this.hands.right.position.distanceTo(node.worldPos) <= grabRadius) {
+          touchingHand = this.hands.right;
         }
+      }
 
-        if (touchingHand) {
-          node.isHeld = true;
-          node.heldHand = touchingHand.handedness;
+      let forwardFactor = 1.0;
+      let lateralFactor = 1.0;
 
-          // Gravity brake: lateral speed slowed by 70%
-          node.glideElapsed += dtMs * 0.30;
-          node.holdProgress = Math.min(1.0, node.holdProgress + dtMs / node.holdDurationMs);
+      if (touchingHand) {
+        node.isHeld = true;
+        node.heldHand = touchingHand.handedness;
 
-          if (nowMs - touchingHand.lastVoltPulseTime >= 80) {
-            touchingHand.lastVoltPulseTime = nowMs;
-            this.pulseHaptic(touchingHand.handedness, 0.20, 30);
-          }
+        // Gravity Brake: drop forward speed to 0.15x and lateral speed to 0.25x
+        forwardFactor = 0.15;
+        lateralFactor = 0.25;
 
-          soundEngine.startSolarCharge(node.holdProgress);
+        node.holdProgress = Math.min(1.0, node.holdProgress + dtMs / node.holdDurationMs);
 
-          // Burst at 100% hold (450ms)
-          if (node.holdProgress >= 1.0) {
-            node.isBurst = true;
-            this.stats.solarHolds++;
-            this.stats.combo += 2;
-            if (this.stats.combo > this.stats.maxCombo) {
-              this.stats.maxCombo = this.stats.combo;
-            }
-            this.stats.score += 350 * Math.min(this.stats.combo, 10);
-            this.stats.overdrive = Math.min(100, this.stats.overdrive + 15);
-
-            this.pulseHaptic(touchingHand.handedness, 0.85, 120);
-            soundEngine.playSolarBurst();
-            this.emitHitSparks(node.worldPos, '#ffd700', 30, true);
-
-            this.voltNodes.splice(i, 1);
-            targetsListChanged = true;
-            this.onHudDirty?.();
-            continue;
-          }
-        } else {
-          if (node.isHeld) {
-            node.isHeld = false;
-            node.heldHand = null;
-            soundEngine.stopSolarCharge();
-          }
-
-          // Smooth charge decay at 0.5x rate if hand slips
-          node.holdProgress = Math.max(0, node.holdProgress - (dtMs / node.holdDurationMs) * 0.5);
-          node.glideElapsed += dtMs;
+        if (nowMs - touchingHand.lastVoltPulseTime >= 80) {
+          touchingHand.lastVoltPulseTime = nowMs;
+          this.pulseHaptic(touchingHand.handedness, 0.20, 30);
         }
 
-        // Glides across chest at locked z = -0.42m
-        const tGlide = Math.min(1.0, node.glideElapsed / node.glideDuration);
-        node.localPos.x = THREE.MathUtils.lerp(node.glideStartX, node.glideEndX, tGlide);
-        node.localPos.y = node.glideY;
-        node.localPos.z = -0.42; // Always locked at comfortable punch distance
+        soundEngine.startSolarCharge(node.holdProgress);
 
-        // Expire when glide finishes uncharged
-        if (tGlide >= 1.0) {
-          node.isMissed = true;
-          if (node.isHeld) {
-            soundEngine.stopSolarCharge();
+        // Burst at 100% hold (450ms)
+        if (node.holdProgress >= 1.0) {
+          node.isBurst = true;
+          this.stats.solarHolds++;
+          this.stats.combo += 2;
+          if (this.stats.combo > this.stats.maxCombo) {
+            this.stats.maxCombo = this.stats.combo;
           }
+          this.stats.score += 350 * Math.min(this.stats.combo, 10);
+          this.stats.overdrive = Math.min(100, this.stats.overdrive + 15);
+
+          this.pulseHaptic(touchingHand.handedness, 0.85, 120);
+          soundEngine.playSolarBurst();
+          this.emitHitSparks(node.worldPos, '#ffd700', 30, true);
+
           this.voltNodes.splice(i, 1);
           targetsListChanged = true;
           this.onHudDirty?.();
           continue;
         }
+      } else {
+        if (node.isHeld) {
+          node.isHeld = false;
+          node.heldHand = null;
+          soundEngine.stopSolarCharge();
+        }
+
+        // Smooth charge decay at 0.5x rate if hand slips
+        node.holdProgress = Math.max(0, node.holdProgress - (dtMs / node.holdDurationMs) * 0.5);
+
+        // Untouched: ease slightly to 0.65x speed inside strike window [-0.75m, -0.20m], accelerate to 1.0x after
+        const inStrikeWindow = node.localPos.z >= -0.75 && node.localPos.z <= -0.20;
+        forwardFactor = inStrikeWindow ? 0.65 : 1.0;
+        lateralFactor = inStrikeWindow ? 0.65 : 1.0;
+      }
+
+      // Continuous forward & diagonal travel
+      node.localPos.z += node.vzBase * forwardFactor * deltaSeconds;
+      node.localPos.x += node.vxBase * lateralFactor * deltaSeconds;
+
+      // Miss check: fly smoothly past shoulders past localZ >= +0.40m
+      if (node.localPos.z >= 0.40) {
+        node.isMissed = true;
+        if (node.isHeld) {
+          soundEngine.stopSolarCharge();
+        }
+        this.voltNodes.splice(i, 1);
+        targetsListChanged = true;
+        this.onHudDirty?.();
+        continue;
       }
 
       this.localToWorld(node.localPos, node.worldPos);
