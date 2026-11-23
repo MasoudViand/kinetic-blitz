@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useMemo, useLayoutEffect, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { vrUiRegistry } from './vrUi';
@@ -16,6 +16,69 @@ interface VrButtonProps {
   disabled?: boolean;
 }
 
+function drawButtonToCanvas(
+  canvas: HTMLCanvasElement,
+  label: string,
+  sublabel: string | undefined,
+  color: string,
+  hoverColor: string | undefined,
+  isHovered: boolean
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const cw = canvas.width;
+  const ch = canvas.height;
+
+  ctx.clearRect(0, 0, cw, ch);
+
+  const activeColor = isHovered ? (hoverColor || '#ffffff') : color;
+  const isDanger = color === '#ef4444' || color === '#f87171';
+
+  // Background panel with rounded corners (never blank white)
+  const bgFill = isHovered
+    ? isDanger
+      ? 'rgba(68, 16, 24, 0.96)'
+      : 'rgba(16, 36, 68, 0.96)'
+    : isDanger
+    ? 'rgba(38, 10, 16, 0.90)'
+    : 'rgba(8, 15, 29, 0.90)';
+
+  ctx.fillStyle = bgFill;
+  ctx.beginPath();
+  ctx.roundRect(8, 8, cw - 16, ch - 16, 24);
+  ctx.fill();
+
+  // Glowing border (thicker and brighter on hover)
+  ctx.strokeStyle = activeColor;
+  ctx.lineWidth = isHovered ? 8 : 4;
+  ctx.stroke();
+
+  // Additional inner glow when hovered
+  if (isHovered) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(14, 14, cw - 28, ch - 28, 20);
+    ctx.stroke();
+  }
+
+  // Label Text
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = isHovered ? '#ffffff' : activeColor;
+  ctx.font = isHovered ? '900 48px monospace' : '900 44px monospace';
+
+  const textY = sublabel ? ch / 2 - 14 : ch / 2;
+  ctx.fillText(label, cw / 2, textY);
+
+  if (sublabel) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText(sublabel, cw / 2, ch / 2 + 28);
+  }
+}
+
 export const VrButton: React.FC<VrButtonProps> = ({
   id,
   label,
@@ -30,8 +93,6 @@ export const VrButton: React.FC<VrButtonProps> = ({
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
-  const textureRef = useRef<THREE.CanvasTexture | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isHovered, setIsHovered] = useState(false);
 
   const onClickRef = useRef(onClick);
@@ -40,91 +101,36 @@ export const VrButton: React.FC<VrButtonProps> = ({
   const baseZ = position[2];
   const currentZ = useRef(baseZ);
 
-  // Redraw canvas on state changes
-  const redraw = useCallback(() => {
-    const canvas = canvasRef.current;
-    const texture = textureRef.current;
-    if (!canvas || !texture) return;
+  // Synchronously create canvas, draw initial unhovered state, and instantiate CanvasTexture
+  const { canvas, texture } = useMemo(() => {
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 180;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // Synchronously paint the initial unhovered state immediately
+    drawButtonToCanvas(c, label, sublabel, color, hoverColor, false);
 
-    const cw = canvas.width;
-    const ch = canvas.height;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
 
-    ctx.clearRect(0, 0, cw, ch);
+    return { canvas: c, texture: tex };
+  }, []);
 
-    const activeColor = isHovered ? (hoverColor || '#ffffff') : color;
-    const isDanger = color === '#ef4444' || color === '#f87171';
-
-    // Background panel with rounded corners
-    const bgFill = isHovered
-      ? isDanger
-        ? 'rgba(68, 16, 24, 0.95)'
-        : 'rgba(16, 36, 68, 0.95)'
-      : isDanger
-      ? 'rgba(38, 10, 16, 0.88)'
-      : 'rgba(8, 15, 29, 0.88)';
-
-    ctx.fillStyle = bgFill;
-    ctx.beginPath();
-    ctx.roundRect(8, 8, cw - 16, ch - 16, 24);
-    ctx.fill();
-
-    // Glowing border (thicker and brighter on hover)
-    ctx.strokeStyle = activeColor;
-    ctx.lineWidth = isHovered ? 8 : 4;
-    ctx.stroke();
-
-    // Additional inner glow when hovered
-    if (isHovered) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(14, 14, cw - 28, ch - 28, 20);
-      ctx.stroke();
-    }
-
-    // Label Text
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = isHovered ? '#ffffff' : activeColor;
-    ctx.font = isHovered ? '900 48px monospace' : '900 44px monospace';
-
-    const textY = sublabel ? ch / 2 - 14 : ch / 2;
-    ctx.fillText(label, cw / 2, textY);
-
-    if (sublabel) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.font = 'bold 20px monospace';
-      ctx.fillText(sublabel, cw / 2, ch / 2 + 28);
-    }
-
-    texture.needsUpdate = true;
-  }, [color, hoverColor, isHovered, label, sublabel]);
-
-  // Create texture once
+  // Dispose texture on unmount
   useEffect(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 180;
-    canvasRef.current = canvas;
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    textureRef.current = texture;
-
-    redraw();
-
     return () => {
       texture.dispose();
     };
-  }, [redraw]);
+  }, [texture]);
 
-  useEffect(() => {
-    redraw();
-  }, [redraw]);
+  // Synchronously re-draw whenever label, sublabel, color, hoverColor, or isHovered changes
+  useLayoutEffect(() => {
+    drawButtonToCanvas(canvas, label, sublabel, color, hoverColor, isHovered);
+    texture.needsUpdate = true;
+  }, [canvas, texture, label, sublabel, color, hoverColor, isHovered]);
 
   // Register with VR UI Registry for Laser Pointer intersection
   useEffect(() => {
@@ -174,14 +180,13 @@ export const VrButton: React.FC<VrButtonProps> = ({
         }}
       >
         <planeGeometry args={[width, height]} />
-        {textureRef.current && (
-          <meshBasicMaterial
-            map={textureRef.current}
-            transparent
-            side={THREE.DoubleSide}
-            depthWrite={false}
-          />
-        )}
+        <meshBasicMaterial
+          map={texture}
+          transparent
+          toneMapped={false}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
       </mesh>
     </group>
   );

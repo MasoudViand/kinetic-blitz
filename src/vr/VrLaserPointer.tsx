@@ -67,12 +67,20 @@ export const VrLaserRay: React.FC<VrLaserRayProps> = ({ handedness, inputSource 
       }
     }
 
-    // If no button is hit, test against the HUD panel plane
-    if (!hoveredButton && vrUiRegistry.hudPlane) {
-      const hudHits = raycaster.current.intersectObject(vrUiRegistry.hudPlane, false);
-      if (hudHits.length > 0) {
-        hitDistance = hudHits[0].distance;
-        aimingAtHud = true;
+    // If no button is hit, test against the registered HUD panel planes
+    if (!hoveredButton) {
+      if (vrUiRegistry.hudPlanes.length > 0) {
+        const hudHits = raycaster.current.intersectObjects(vrUiRegistry.hudPlanes, true);
+        if (hudHits.length > 0) {
+          hitDistance = hudHits[0].distance;
+          aimingAtHud = true;
+        }
+      } else if (vrUiRegistry.hudPlane) {
+        const hudHits = raycaster.current.intersectObject(vrUiRegistry.hudPlane, false);
+        if (hudHits.length > 0) {
+          hitDistance = hudHits[0].distance;
+          aimingAtHud = true;
+        }
       }
     }
 
