@@ -21,16 +21,24 @@ import { PhoneRemoteView } from './tv/PhoneRemoteView';
 import { phoneCastSession, sanitizeRoomCode, TvStateUpdate } from './tv/tvCastService';
 import { Smartphone, X } from 'lucide-react';
 
+const VrLauncherView = React.lazy(() => import('./vr/VrLauncherView'));
+
 export const App: React.FC = () => {
-  // Routing: Route to <TvReceiverView /> when on /tv or #/tv (no router library needed)
+  // Routing: Route to <TvReceiverView /> when on /tv or #/tv, and <VrLauncherView /> when on /vr or #/vr
   const [isTvView, setIsTvView] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.location.pathname.startsWith('/tv') || window.location.hash.startsWith('#/tv');
   });
 
+  const [isVrView, setIsVrView] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.pathname.startsWith('/vr') || window.location.hash.startsWith('#/vr');
+  });
+
   useEffect(() => {
     const handleLocationChange = () => {
       setIsTvView(window.location.pathname.startsWith('/tv') || window.location.hash.startsWith('#/tv'));
+      setIsVrView(window.location.pathname.startsWith('/vr') || window.location.hash.startsWith('#/vr'));
     };
     window.addEventListener('popstate', handleLocationChange);
     window.addEventListener('hashchange', handleLocationChange);
@@ -75,7 +83,7 @@ export const App: React.FC = () => {
 
   // Sync state callbacks from GameEngine
   useEffect(() => {
-    if (isTvView) return;
+    if (isTvView || isVrView) return;
 
     const engine = engineRef.current;
     (window as unknown as { __KINETIC_BLITZ_ENGINE__: GameEngine }).__KINETIC_BLITZ_ENGINE__ = engine;
@@ -89,7 +97,7 @@ export const App: React.FC = () => {
       setTutorialStep(step);
       setTutorialCount(count);
     };
-  }, [isTvView]);
+  }, [isTvView, isVrView]);
 
   // Connect / Disconnect TV handlers
   const handleConnectTv = useCallback(async (code: string) => {
@@ -130,7 +138,7 @@ export const App: React.FC = () => {
 
   // Check URL parameters for ?tv=CODE and ?mock=true on load
   useEffect(() => {
-    if (isTvView) return;
+    if (isTvView || isVrView) return;
 
     const params = new URLSearchParams(window.location.search);
     const mockParam = params.get('mock');
@@ -153,22 +161,22 @@ export const App: React.FC = () => {
         return () => clearTimeout(timer);
       }
     }
-  }, [isTvView, handleConnectTv]);
+  }, [isTvView, isVrView, handleConnectTv]);
 
   // Pre-load vision model weights in background (zero camera access, zero hardware activation)
   useEffect(() => {
-    if (!isTvView) {
+    if (!isTvView && !isVrView) {
       poseService.preloadModel().catch((err) => {
         console.warn('[App] Model preload note:', err);
       });
     }
-  }, [isTvView]);
+  }, [isTvView, isVrView]);
 
   // Camera Hardware Lifecycle:
   // ONLY enable camera during active gameplay, calibration, countdown, paused, or phone TV sensor mode.
   // In the main menu (idle), summary modal (game_over), or settings, the camera hardware is completely disabled.
   useEffect(() => {
-    if (isTvView) return;
+    if (isTvView || isVrView) return;
 
     const isCameraNeeded = isTvConnected || (
       gameState === 'calibrating' ||
@@ -191,11 +199,11 @@ export const App: React.FC = () => {
       setIsCameraActive(false);
       setCameraPermissionDenied(false);
     }
-  }, [isTvView, isTvConnected, gameState]);
+  }, [isTvView, isVrView, isTvConnected, gameState]);
 
-  // Subscribe to pose detection stream (Only on phone/desktop, never on TV)
+  // Subscribe to pose detection stream (Only on phone/desktop, never on TV or VR)
   useEffect(() => {
-    if (isTvView) return;
+    if (isTvView || isVrView) return;
 
     const unsubscribe = poseService.subscribe((landmarks) => {
       landmarksRef.current = landmarks;
@@ -234,11 +242,11 @@ export const App: React.FC = () => {
       unsubscribe();
       poseService.stopCamera();
     };
-  }, [isTvView]);
+  }, [isTvView, isVrView]);
 
   // Main 60 FPS Render & Engine Loop
   useEffect(() => {
-    if (isTvView) return;
+    if (isTvView || isVrView) return;
 
     let animId: number;
 
@@ -301,7 +309,7 @@ export const App: React.FC = () => {
 
     animId = requestAnimationFrame(renderLoop);
     return () => cancelAnimationFrame(animId);
-  }, [isTvView, cameraMode]);
+  }, [isTvView, isVrView, cameraMode]);
 
   // Workout Flow Controls
   const handleStartWorkout = (mode: GameMode, posturePref: PostureType, selectedDifficulty: DifficultyLevel) => {
@@ -425,6 +433,21 @@ export const App: React.FC = () => {
   // TV VIEW ROUTE
   if (isTvView) {
     return <TvReceiverView />;
+  }
+
+  // VR VIEW ROUTE (Meta Quest 3 WebXR Mode)
+  if (isVrView) {
+    return (
+      <React.Suspense
+        fallback={
+          <div className="w-full h-[100dvh] flex items-center justify-center bg-[#070b14] text-pulse-cyan font-arcade text-sm">
+            LOADING KINETIC BLITZ VR...
+          </div>
+        }
+      >
+        <VrLauncherView />
+      </React.Suspense>
+    );
   }
 
   // PHONE REMOTE VIEW (When paired to TV as low-latency pose sensor & remote)

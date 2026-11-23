@@ -16,6 +16,7 @@ import {
   Sparkles,
   EyeOff,
   Tv,
+  Glasses,
 } from 'lucide-react';
 import { HistoryModal } from './HistoryModal';
 import { WelcomeModal } from './WelcomeModal';
@@ -333,6 +334,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 <span>Play on TV (Wireless Cast)</span>
               </button>
             )}
+
+            {/* Play in VR (Quest 3) */}
+            <a
+              href="/vr"
+              className="w-full py-2 sm:py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-[11px] sm:text-xs font-arcade font-semibold text-gray-200 transition-all flex items-center justify-center gap-2 hover:border-pulse-magenta cursor-pointer group"
+            >
+              <Glasses className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-pulse-magenta group-hover:scale-110 transition-transform" />
+              <span>Play in VR (Quest 3)</span>
+            </a>
           </div>
 
           {/* Privacy & Mock Mode Links (Mock mode only in dev mode) */}
