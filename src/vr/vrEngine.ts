@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GameMode, DifficultyLevel } from '../types/game';
 import { soundEngine } from '../audio/soundEngine';
 import {
+  VrPhase,
   VrGameState,
   VrHandInfo,
   VrBlitzOrb,
@@ -26,7 +27,20 @@ export class VrEngine {
     right: new THREE.Vector3(1, 0, 0),
     forwardYaw: 0,
     calibrated: false,
+    headDriftDistance: 0,
+    isDrifted: false,
   };
+
+  public justResumed: boolean = false;
+
+  public get phase(): VrPhase {
+    if (this.state === 'countdown' || this.state === 'calibrating' || this.state === 'idle') {
+      return 'CALIBRATING';
+    }
+    if (this.state === 'playing') return 'PLAYING';
+    if (this.state === 'paused') return 'PAUSED';
+    return 'SUMMARY';
+  }
 
   // Active targets
   public blitzOrbs: VrBlitzOrb[] = [];
@@ -213,6 +227,38 @@ export class VrEngine {
     this.state = 'countdown';
     this.onStateChange?.(this.state);
     this.onHudDirty?.();
+  }
+
+  /**
+   * Pause active session: freezes spawns, timers, and targets in place
+   */
+  public pauseGame() {
+    if (this.state === 'playing' || this.state === 'countdown') {
+      this.state = 'paused';
+      soundEngine.stopSolarCharge();
+      this.onStateChange?.(this.state);
+      this.onHudDirty?.();
+    }
+  }
+
+  /**
+   * Resume paused session without forward target jumps
+   */
+  public resumeGame() {
+    if (this.state === 'paused') {
+      this.state = 'playing';
+      this.justResumed = true;
+      this.onStateChange?.(this.state);
+      this.onHudDirty?.();
+    }
+  }
+
+  /**
+   * Restart session cleanly
+   */
+  public restartGame(camera?: THREE.Camera) {
+    soundEngine.stopSolarCharge();
+    this.startSession(this.mode, this.difficulty, camera);
   }
 
   /**
@@ -430,8 +476,10 @@ export class VrEngine {
     const speed = 2.4; // m/s
     const startLocalZ = -5.5;
 
-    const barY = this.calibration.headY - 0.12; // Overhead bar for squat
-    const beamX = orientation === 'vertical_left' ? -0.40 : orientation === 'vertical_right' ? 0.40 : 0;
+    // Overhead bar bottom edge at headY - 0.25m (center at headY - 0.16m, height 0.18m)
+    const barY = this.calibration.headY - 0.16;
+    // Vertical beam at lateral offset 0.36m (only requires upper-body lean of ~0.28m-0.32m)
+    const beamX = orientation === 'vertical_left' ? -0.36 : orientation === 'vertical_right' ? 0.36 : 0;
 
     const initialWorld = this.localToWorld(new THREE.Vector3(beamX, barY, startLocalZ));
 
@@ -449,8 +497,8 @@ export class VrEngine {
       isDodged: false,
       barY,
       beamX,
-      width: orientation === 'horizontal_squat' ? 1.6 : 0.45,
-      height: orientation === 'horizontal_squat' ? 0.08 : 1.4,
+      width: orientation === 'horizontal_squat' ? 1.6 : 0.38,
+      height: orientation === 'horizontal_squat' ? 0.18 : 1.35,
     });
 
     soundEngine.playLaserWarning();
@@ -462,9 +510,21 @@ export class VrEngine {
    * Main imperative simulation step called inside R3F useFrame
    */
   public update(deltaSeconds: number, camera: THREE.Camera, nowMs: number) {
+    // Reset delta clamp after resuming so targets never jump forward
+    if (this.justResumed) {
+      deltaSeconds = 0.0001;
+      this.justResumed = false;
+    }
+
     const dtMs = deltaSeconds * 1000;
 
-    // 1. Update Particles Pool
+    // Head-Drift Guard: measure distance from calibrated playspace center
+    const driftX = camera.position.x - this.calibration.playerOrigin.x;
+    const driftZ = camera.position.z - this.calibration.playerOrigin.z;
+    this.calibration.headDriftDistance = Math.hypot(driftX, driftZ);
+    this.calibration.isDrifted = this.calibration.headDriftDistance > 0.40;
+
+    // 1. Update Particles Pool (always runs so explosions fade smoothly)
     for (let i = 0; i < VrEngine.MAX_PARTICLES; i++) {
       const p = this.particles[i];
       if (!p.active) continue;
@@ -476,6 +536,11 @@ export class VrEngine {
         p.position.addScaledVector(p.velocity, deltaSeconds);
         p.velocity.y -= 3.2 * deltaSeconds;
       }
+    }
+
+    // Freeze game loop if paused or in summary
+    if (this.state === 'paused' || this.state === 'game_over' || this.state === 'summary') {
+      return;
     }
 
     // Handle Countdown State
@@ -764,18 +829,18 @@ export class VrEngine {
         let isHit = false;
 
         if (laser.orientation === 'horizontal_squat') {
-          // Must squat below overhead bar
-          if (localHead.y > this.calibration.headY - 0.16) {
+          // Bottom edge at headY - 0.25m (comfortable in-place knee bend squat)
+          if (localHead.y > this.calibration.headY - 0.22) {
             isHit = true;
           }
         } else if (laser.orientation === 'vertical_left') {
-          // Lean right to dodge
-          if (localHead.x < -0.15) {
+          // Upper-body lean right by ~0.28m-0.32m avoids left barrier
+          if (localHead.x < 0.10) {
             isHit = true;
           }
         } else if (laser.orientation === 'vertical_right') {
-          // Lean left to dodge
-          if (localHead.x > 0.15) {
+          // Upper-body lean left by ~0.28m-0.32m avoids right barrier
+          if (localHead.x > -0.10) {
             isHit = true;
           }
         }
@@ -814,8 +879,8 @@ export class VrEngine {
     }
   }
 
-  public resetSession() {
-    this.startSession(this.mode, this.difficulty);
+  public resetSession(camera?: THREE.Camera) {
+    this.restartGame(camera);
   }
 }
 

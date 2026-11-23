@@ -247,6 +247,11 @@ export const VrLauncherView: React.FC = () => {
                 <Layers className="w-4 h-4 text-pulse-magenta" />
                 <span>Enter VR Arena (Cyber Grid)</span>
               </button>
+
+              {/* VR Arena Roomscale boundary guidance */}
+              <p className="text-[11px] text-gray-400 text-center px-2 py-0.5 leading-snug">
+                For full dodging &amp; squatting in VR Arena, set your Quest boundary to <strong>Roomscale</strong> (or use Mixed Reality Passthrough).
+              </p>
             </div>
 
             {/* WebXR Hardware Status or Desktop Fallback */}
@@ -257,8 +262,9 @@ export const VrLauncherView: React.FC = () => {
               </div>
               <ul className="space-y-1 text-gray-400 ml-5 list-disc">
                 <li>Put on your Meta Quest 3 headset and launch <strong>Meta Quest Browser</strong>.</li>
-                <li>Controllers provide haptic feedback; bare hands are also tracked automatically.</li>
-                <li>Press controller <strong>[A]</strong> (Right) or <strong>[X]</strong> (Left) to recenter strike plane.</li>
+                <li>Controllers provide 6DoF haptics; bare hands are also tracked automatically.</li>
+                <li>In game: <strong>[B / Y]</strong> Pause · <strong>[Thumbstick]</strong> Recenter · <strong>[A / X]</strong> Recalibrate.</li>
+                <li>In pause menu: <strong>[A / X]</strong> Resume · <strong>[Grip]</strong> Restart · <strong>[B / Y]</strong> Stop &amp; Exit.</li>
               </ul>
 
               {/* Notice if not in XR browser */}

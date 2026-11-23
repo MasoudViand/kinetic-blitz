@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import * as THREE from 'three';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import { useXRInputSourceStateContext, XRSpace } from '@react-three/xr';
 import { vrEngine } from './vrEngine';
 
@@ -20,9 +20,7 @@ export const VrFist: React.FC<VrFistProps> = ({ handedness }) => {
     new THREE.Vector3(),
   ]);
 
-  const lastButtonAPressed = useRef(false);
   const state = useXRInputSourceStateContext('controller');
-  const { camera } = useThree();
 
   const isLeft = handedness === 'left';
   const colorHex = isLeft ? '#00f0ff' : '#ff0077';
@@ -58,16 +56,6 @@ export const VrFist: React.FC<VrFistProps> = ({ handedness }) => {
     prevPositions.current[2].copy(prevPositions.current[1]);
     prevPositions.current[1].copy(prevPositions.current[0]);
     prevPositions.current[0].copy(currPos);
-
-    // Check Controller Button A / X for Recalibration
-    const gamepad = state?.inputSource?.gamepad;
-    if (gamepad && gamepad.buttons && gamepad.buttons.length > 4) {
-      const buttonAorX = gamepad.buttons[4]; // Button A on Right, Button X on Left
-      if (buttonAorX?.pressed && !lastButtonAPressed.current) {
-        vrEngine.recalibrate(camera);
-      }
-      lastButtonAPressed.current = !!buttonAorX?.pressed;
-    }
   });
 
   const resolvedSpace =

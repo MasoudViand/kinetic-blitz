@@ -38,23 +38,30 @@ export const VrHud: React.FC = () => {
     const width = canvas.width;
     const height = canvas.height;
 
-    // Clear
+    // Clear canvas
     ctx.clearRect(0, 0, width, height);
 
+    const state = vrEngine.state;
+
     // Background panel with neon border
-    ctx.fillStyle = 'rgba(7, 13, 26, 0.82)';
+    ctx.fillStyle = state === 'paused' ? 'rgba(8, 12, 22, 0.92)' : 'rgba(7, 13, 26, 0.85)';
     ctx.beginPath();
     ctx.roundRect(16, 16, width - 32, height - 32, 28);
     ctx.fill();
 
     // Border glow
-    ctx.strokeStyle = vrEngine.stats.isOverdrive ? '#ff0077' : '#00f0ff';
+    ctx.strokeStyle =
+      state === 'paused'
+        ? '#f59e0b'
+        : vrEngine.stats.isOverdrive
+        ? '#ff0077'
+        : '#00f0ff';
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    const state = vrEngine.state;
-
+    // ==========================================
     // 1. COUNTDOWN STATE
+    // ==========================================
     if (state === 'countdown') {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -73,14 +80,94 @@ export const VrHud: React.FC = () => {
 
       ctx.fillStyle = '#00f0ff';
       ctx.font = '18px monospace';
-      ctx.fillText('[A / X Button: Recalibrate Center]', width / 2, 430);
+      ctx.fillText('[Thumbstick: Recenter Center   •   B / Y: Pause]', width / 2, 430);
 
       texture.needsUpdate = true;
       return;
     }
 
-    // 2. GAME OVER / WORKOUT SUMMARY STATE
-    if (state === 'game_over') {
+    // ==========================================
+    // 2. PAUSED STATE
+    // ==========================================
+    if (state === 'paused') {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText('KINETIC BLITZ VR', width / 2, 45);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 60px monospace';
+      ctx.fillText('GAME PAUSED', width / 2, 85);
+
+      // Current workout stats overview
+      const seconds = Math.max(0, Math.ceil(vrEngine.timeRemaining));
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      const timeStr = vrEngine.mode === 'endless' ? '∞' : `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+      ctx.font = 'bold 22px monospace';
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(
+        `SCORE: ${vrEngine.stats.score}   •   COMBO: x${vrEngine.stats.combo}   •   TIME: ${timeStr}`,
+        width / 2,
+        170
+      );
+
+      // Action control badges
+      const btnY = 240;
+      const btnW = 270;
+      const btnH = 68;
+      const gap = 30;
+      const startX = (width - (btnW * 3 + gap * 2)) / 2;
+
+      // 1. Resume (A / X)
+      ctx.fillStyle = '#00f0ff';
+      ctx.beginPath();
+      ctx.roundRect(startX, btnY, btnW, btnH, 14);
+      ctx.fill();
+
+      ctx.fillStyle = '#080e1a';
+      ctx.font = '900 24px monospace';
+      ctx.fillText('[A / X] RESUME', startX + btnW / 2, btnY + 22);
+
+      // 2. Restart (Grip)
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.roundRect(startX + btnW + gap, btnY, btnW, btnH, 14);
+      ctx.fill();
+
+      ctx.fillStyle = '#080e1a';
+      ctx.font = '900 24px monospace';
+      ctx.fillText('[GRIP] RESTART', startX + btnW + gap + btnW / 2, btnY + 22);
+
+      // 3. Stop & Exit (B / Y)
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+      ctx.beginPath();
+      ctx.roundRect(startX + (btnW + gap) * 2, btnY, btnW, btnH, 14);
+      ctx.fill();
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = '#f87171';
+      ctx.font = '900 24px monospace';
+      ctx.fillText('[B / Y] STOP & EXIT', startX + (btnW + gap) * 2 + btnW / 2, btnY + 22);
+
+      // Footer guidance
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '18px monospace';
+      ctx.fillText('Stand inside the floor circle   •   Click Thumbstick to Recenter', width / 2, 380);
+
+      texture.needsUpdate = true;
+      return;
+    }
+
+    // ==========================================
+    // 3. GAME OVER / WORKOUT SUMMARY STATE
+    // ==========================================
+    if (state === 'game_over' || state === 'summary') {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
 
@@ -92,7 +179,6 @@ export const VrHud: React.FC = () => {
       ctx.font = '900 48px monospace';
       ctx.fillText('WORKOUT COMPLETE!', width / 2, 75);
 
-      // Score and rank
       const rank =
         vrEngine.stats.score >= 10000
           ? 'S'
@@ -118,30 +204,58 @@ export const VrHud: React.FC = () => {
       ctx.fillText(`PUNCHES: ${vrEngine.stats.pulseHits}`, leftX, rowY);
       ctx.fillText(`POWER HITS: ${vrEngine.stats.powerHits}`, rightX, rowY);
 
-      rowY += 40;
+      rowY += 38;
       ctx.fillText(`VOLT HOLDS: ${vrEngine.stats.solarHolds}`, leftX, rowY);
       ctx.fillText(`LASERS DODGED: ${vrEngine.stats.lasersDodged}`, rightX, rowY);
 
-      rowY += 40;
+      rowY += 38;
       ctx.fillText(`MAX COMBO: x${vrEngine.stats.maxCombo}`, leftX, rowY);
       ctx.fillText(`CALORIES: ~${vrEngine.stats.caloriesBurned} kcal`, rightX, rowY);
 
-      // Interactive Punch/Click Restart Button
+      // Clean Controller Actions (Replaced "Punch to Restart")
+      const btnY = 360;
+      const btnW = 320;
+      const btnH = 64;
+      const gap = 40;
+      const startX = (width - (btnW * 2 + gap)) / 2;
+
+      // Play Again Pill
       ctx.fillStyle = '#00f0ff';
       ctx.beginPath();
-      ctx.roundRect(width / 2 - 180, 375, 360, 70, 16);
+      ctx.roundRect(startX, btnY, btnW, btnH, 14);
       ctx.fill();
 
       ctx.fillStyle = '#070d1a';
       ctx.textAlign = 'center';
-      ctx.font = '900 28px monospace';
-      ctx.fillText('PUNCH TO RESTART', width / 2, 415);
+      ctx.font = '900 24px monospace';
+      ctx.fillText('[A / X] PLAY AGAIN', startX + btnW / 2, btnY + 20);
+
+      // Back to Menu Pill
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+      ctx.beginPath();
+      ctx.roundRect(startX + btnW + gap, btnY, btnW, btnH, 14);
+      ctx.fill();
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = '#fca5a5';
+      ctx.textAlign = 'center';
+      ctx.font = '900 24px monospace';
+      ctx.fillText('[B / Y] BACK TO MENU', startX + btnW + gap + btnW / 2, btnY + 20);
+
+      // Subtext
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+      ctx.font = '16px monospace';
+      ctx.fillText('Press controller buttons (or tap screen with hand)', width / 2, 445);
 
       texture.needsUpdate = true;
       return;
     }
 
-    // 3. ACTIVE PLAYING HUD
+    // ==========================================
+    // 4. ACTIVE PLAYING HUD
+    // ==========================================
     // Header Bar
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
@@ -246,12 +360,12 @@ export const VrHud: React.FC = () => {
       305
     );
 
-    // Recalibration Hint Footer
+    // Action Prompts & Controls Footer
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
-    ctx.font = '15px monospace';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
+    ctx.font = 'bold 16px monospace';
     ctx.fillText(
-      'Press controller [A] or [X] at any time to recalibrate strike center',
+      '[B / Y] Pause   •   [Thumbstick] Recenter   •   [A / X] Recalibrate',
       width / 2,
       445
     );
@@ -270,10 +384,9 @@ export const VrHud: React.FC = () => {
     };
   }, [drawHUD]);
 
-  // Periodic redraw for clock & calories + Check punch restart button
+  // Periodic redraw for clock & calories + positioning
   useFrame(() => {
     const now = performance.now();
-    // Redraw at ~4 Hz for timer ticking
     if (now - lastDrawnTime.current > 250) {
       lastDrawnTime.current = now;
       drawHUD();
@@ -281,21 +394,17 @@ export const VrHud: React.FC = () => {
 
     // Position HUD ahead of player in calibrated corridor
     if (meshRef.current) {
-      const localHud = new THREE.Vector3(0, vrEngine.calibration.headY + 0.35, -1.8);
-      vrEngine.localToWorld(localHud, meshRef.current.position);
-      meshRef.current.rotation.y = vrEngine.calibration.forwardYaw;
-      meshRef.current.rotation.x = 0.12;
-    }
+      const isPaused = vrEngine.state === 'paused';
+      const isSummary = vrEngine.state === 'game_over' || vrEngine.state === 'summary';
 
-    // In Game Over state, check if player punches the restart button
-    if (vrEngine.state === 'game_over') {
-      const restartLocal = new THREE.Vector3(0, vrEngine.calibration.headY - 0.15, -1.8);
-      const restartWorld = vrEngine.localToWorld(restartLocal);
-      const hitLeft = vrEngine.hands.left.active && vrEngine.hands.left.position.distanceTo(restartWorld) < 0.45;
-      const hitRight = vrEngine.hands.right.active && vrEngine.hands.right.position.distanceTo(restartWorld) < 0.45;
-      if (hitLeft || hitRight) {
-        vrEngine.startSession(vrEngine.mode, vrEngine.difficulty, camera);
-      }
+      const localY = vrEngine.calibration.headY + (isPaused ? 0.12 : isSummary ? 0.20 : 0.35);
+      const localZ = isPaused ? -1.5 : isSummary ? -1.6 : -1.8;
+
+      const localHud = new THREE.Vector3(0, localY, localZ);
+      vrEngine.localToWorld(localHud, meshRef.current.position);
+
+      meshRef.current.rotation.y = vrEngine.calibration.forwardYaw;
+      meshRef.current.rotation.x = isPaused ? 0.06 : isSummary ? 0.08 : 0.12;
     }
   });
 
@@ -304,8 +413,10 @@ export const VrHud: React.FC = () => {
       ref={meshRef}
       position={[0, 1.8, -1.8]}
       onClick={() => {
-        if (vrEngine.state === 'game_over') {
-          vrEngine.startSession(vrEngine.mode, vrEngine.difficulty, camera);
+        if (vrEngine.state === 'paused') {
+          vrEngine.resumeGame();
+        } else if (vrEngine.state === 'game_over' || vrEngine.state === 'summary') {
+          vrEngine.restartGame(camera);
         }
       }}
     >

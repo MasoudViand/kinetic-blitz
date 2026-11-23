@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-export type VrGameState = 'idle' | 'countdown' | 'playing' | 'paused' | 'game_over';
+export type VrPhase = 'CALIBRATING' | 'PLAYING' | 'PAUSED' | 'SUMMARY';
+export type VrGameState = 'idle' | 'calibrating' | 'countdown' | 'playing' | 'paused' | 'game_over' | 'summary';
 
 export interface VrHandInfo {
   handedness: 'left' | 'right';
@@ -70,8 +71,8 @@ export interface VrLaserBarrier {
   active: boolean;
   hasCollided: boolean;
   isDodged: boolean;
-  barY: number;             // headY - 0.12 for squat
-  beamX: number;            // -0.40 or +0.40 for vertical
+  barY: number;             // center Y of barrier
+  beamX: number;            // lateral X of vertical beam
   width: number;
   height: number;
 }
@@ -85,6 +86,8 @@ export interface VrCalibration {
   right: THREE.Vector3;        // normalized horizontal lateral direction
   forwardYaw: number;          // yaw angle in radians
   calibrated: boolean;
+  headDriftDistance: number;   // horizontal distance from playerOrigin (meters)
+  isDrifted: boolean;          // true when headDriftDistance > 0.40m
 }
 
 export interface VrStats {

@@ -12,7 +12,7 @@ import { VrCorridorAnchor } from './VrCorridorAnchor';
 import { VrHud } from './VrHud';
 import { GameMode, DifficultyLevel } from '../types/game';
 
-// Configure WebXR store with custom fist knuckles and dev emulator
+// Configure WebXR store with bounded-floor request for Quest Roomscale support
 export const xrStore = createXRStore({
   controller: {
     left: VrFistLeft,
@@ -21,6 +21,10 @@ export const xrStore = createXRStore({
   hand: {
     left: VrHandFistLeft,
     right: VrHandFistRight,
+  },
+  customSessionInit: {
+    requiredFeatures: ['local-floor'],
+    optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers'],
   },
   emulate: import.meta.env.DEV ? 'metaQuest3' : false,
 });
@@ -37,9 +41,13 @@ const VrGameLoop: React.FC<{ mode: GameMode; difficulty: DifficultyLevel; onExit
   difficulty,
   onExitSession,
 }) => {
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   const session = useXR((xr) => xr.session);
   const calibratedOnce = useRef(false);
+
+  // Rising-edge tracking and 350ms cooldown for controller buttons
+  const lastActionTime = useRef<number>(0);
+  const prevButtonStates = useRef<Map<string, boolean>>(new Map());
 
   // Auto-calibrate and start session once WebXR session is active
   useEffect(() => {
@@ -53,7 +61,120 @@ const VrGameLoop: React.FC<{ mode: GameMode; difficulty: DifficultyLevel; onExit
     }
   }, [session, mode, difficulty, camera, onExitSession]);
 
+  // Handle visibility changes (Guardian/system menu pause) and session lifecycle
+  useEffect(() => {
+    if (!session) return;
+
+    // Auto-pause when Meta Guardian boundary or Quest system overlay interrupts
+    const handleVisibilityChange = () => {
+      if (session.visibilityState === 'visible-blurred' || session.visibilityState === 'hidden') {
+        vrEngine.pauseGame();
+      }
+    };
+
+    const handleSessionEnd = () => {
+      vrEngine.state = 'idle';
+      onExitSession?.();
+    };
+
+    // Bare-hand tap fallback during SUMMARY when no controllers are connected
+    const handleSelectStart = (e: XRInputSourceEvent) => {
+      if (vrEngine.phase === 'SUMMARY' && !e.inputSource.gamepad) {
+        vrEngine.restartGame(camera);
+      }
+    };
+
+    session.addEventListener('visibilitychange', handleVisibilityChange);
+    session.addEventListener('end', handleSessionEnd);
+    session.addEventListener('selectstart', handleSelectStart);
+
+    return () => {
+      session.removeEventListener('visibilitychange', handleVisibilityChange);
+      session.removeEventListener('end', handleSessionEnd);
+      session.removeEventListener('selectstart', handleSelectStart);
+    };
+  }, [session, camera, onExitSession]);
+
   useFrame((_, delta) => {
+    // 1. Poll Controller Gamepad Buttons with Rising-Edge Detection
+    const activeSession = gl.xr.getSession();
+    if (activeSession) {
+      const now = performance.now();
+      const COOLDOWN_MS = 350;
+
+      for (const inputSource of activeSession.inputSources) {
+        const gamepad = inputSource.gamepad;
+        if (!gamepad) continue;
+
+        const handedness = (inputSource.handedness as 'left' | 'right') || 'right';
+        const buttons = gamepad.buttons;
+
+        // Button mappings:
+        // buttons[1]: Grip
+        // buttons[3]: Thumbstick click
+        // buttons[4]: A (right) / X (left)
+        // buttons[5]: B (right) / Y (left)
+        const checkRisingEdge = (btnIndex: number): boolean => {
+          if (!buttons[btnIndex]) return false;
+          const isPressed = buttons[btnIndex].pressed;
+          const key = `${handedness}-${btnIndex}`;
+          const wasPressed = !!prevButtonStates.current.get(key);
+          prevButtonStates.current.set(key, isPressed);
+          return isPressed && !wasPressed;
+        };
+
+        const isGripPressed = checkRisingEdge(1);
+        const isThumbstickPressed = checkRisingEdge(3);
+        const isAorXPressed = checkRisingEdge(4);
+        const isBorYPressed = checkRisingEdge(5);
+
+        if (now - lastActionTime.current >= COOLDOWN_MS) {
+          const phase = vrEngine.phase;
+
+          if (phase === 'PLAYING') {
+            if (isBorYPressed) {
+              vrEngine.pulseHaptic(handedness, 0.35, 35);
+              vrEngine.pauseGame();
+              lastActionTime.current = now;
+            } else if (isThumbstickPressed) {
+              vrEngine.pulseHaptic(handedness, 0.35, 35);
+              vrEngine.recalibrate(camera);
+              lastActionTime.current = now;
+            }
+          } else if (phase === 'PAUSED') {
+            if (isAorXPressed) {
+              vrEngine.pulseHaptic(handedness, 0.35, 35);
+              vrEngine.resumeGame();
+              lastActionTime.current = now;
+            } else if (isGripPressed) {
+              vrEngine.pulseHaptic(handedness, 0.35, 35);
+              vrEngine.restartGame(camera);
+              lastActionTime.current = now;
+            } else if (isBorYPressed) {
+              vrEngine.pulseHaptic(handedness, 0.35, 35);
+              vrEngine.state = 'idle';
+              activeSession.end().catch(() => {});
+              onExitSession?.();
+              lastActionTime.current = now;
+            }
+          } else if (phase === 'SUMMARY') {
+            if (isAorXPressed) {
+              vrEngine.pulseHaptic(handedness, 0.35, 35);
+              vrEngine.restartGame(camera);
+              lastActionTime.current = now;
+            } else if (isBorYPressed) {
+              vrEngine.pulseHaptic(handedness, 0.35, 35);
+              vrEngine.state = 'idle';
+              activeSession.end().catch(() => {});
+              onExitSession?.();
+              lastActionTime.current = now;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Engine Simulation Step
     vrEngine.update(delta, camera, performance.now());
   });
 

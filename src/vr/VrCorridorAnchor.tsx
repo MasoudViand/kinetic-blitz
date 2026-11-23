@@ -5,35 +5,70 @@ import { vrEngine } from './vrEngine';
 
 export const VrCorridorAnchor: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
+  const ringMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const ringMeshRef = useRef<THREE.Mesh>(null);
 
   useFrame(() => {
     if (!groupRef.current) return;
     groupRef.current.position.copy(vrEngine.calibration.playerOrigin);
     groupRef.current.rotation.y = vrEngine.calibration.forwardYaw;
+
+    // Head-drift guard pulse
+    const isDrifted = vrEngine.calibration.isDrifted;
+    const mat = ringMatRef.current;
+    const ringMesh = ringMeshRef.current;
+
+    if (mat && ringMesh) {
+      if (isDrifted) {
+        const pulse = 0.5 + Math.sin(performance.now() * 0.008) * 0.4;
+        mat.color.set('#f59e0b'); // Warning amber
+        mat.opacity = 0.4 + pulse * 0.4;
+        const scale = 1.0 + pulse * 0.08;
+        ringMesh.scale.set(scale, scale, 1);
+      } else {
+        mat.color.set('#00f0ff'); // Crisp cyan
+        mat.opacity = 0.45;
+        ringMesh.scale.set(1, 1, 1);
+      }
+    }
   });
 
   return (
     <group ref={groupRef} position={[0, 0.005, 0]}>
-      {/* 1. Player Stance Ring (y = 0.01) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
-        <ringGeometry args={[0.42, 0.44, 48]} />
+      {/* 1. Anchored Player Playspace Center Ring (radius ~0.35m) */}
+      <mesh ref={ringMeshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
+        <ringGeometry args={[0.34, 0.36, 48]} />
         <meshBasicMaterial
+          ref={ringMatRef}
           color="#00f0ff"
           transparent
-          opacity={0.35}
+          opacity={0.45}
           blending={THREE.AdditiveBlending}
           side={THREE.DoubleSide}
           depthWrite={false}
         />
       </mesh>
 
-      {/* 2. Facing Direction Chevron Marker */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, -0.42]}>
+      {/* Center Dot Indicator */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
+        <circleGeometry args={[0.04, 24]} />
+        <meshBasicMaterial
+          color="#00f0ff"
+          transparent
+          opacity={0.3}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* 2. Facing Direction Forward Chevron Marker */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, -0.35]}>
         <ringGeometry args={[0.06, 0.08, 3, 1, 0, Math.PI]} />
         <meshBasicMaterial
           color="#00f0ff"
           transparent
-          opacity={0.65}
+          opacity={0.7}
           blending={THREE.AdditiveBlending}
           side={THREE.DoubleSide}
           depthWrite={false}

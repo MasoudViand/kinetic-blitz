@@ -28,6 +28,8 @@ export const VrTargets: React.FC = () => {
 
   // Imperative per-frame update loop (Zero React re-renders)
   useFrame(() => {
+    if (vrEngine.state === 'paused') return;
+
     // 1. Update Blitz Orbs
     for (let i = 0; i < vrEngine.blitzOrbs.length; i++) {
       const orb = vrEngine.blitzOrbs[i];
@@ -78,7 +80,7 @@ export const VrTargets: React.FC = () => {
   });
 
   return (
-    <group>
+    <group visible={vrEngine.state !== 'paused'}>
       {/* 1. Blitz Orbs */}
       {vrEngine.blitzOrbs.map((orb) => (
         <group
