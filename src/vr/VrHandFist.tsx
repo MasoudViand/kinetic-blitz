@@ -29,8 +29,14 @@ export const VrHandFist: React.FC<VrHandFistProps> = ({ handedness }) => {
     );
   });
 
+  const handSpace =
+    state?.inputSource?.hand?.get('middle-finger-metacarpal') ||
+    state?.inputSource?.hand?.get('wrist') ||
+    state?.inputSource?.targetRaySpace ||
+    'target-ray-space';
+
   return (
-    <XRSpace space="middle-finger-metacarpal">
+    <XRSpace space={handSpace}>
       <group ref={groupRef}>
         {/* Core Knuckle Orb */}
         <mesh position={[0, 0, 0]}>

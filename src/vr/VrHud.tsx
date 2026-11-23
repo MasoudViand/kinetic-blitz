@@ -279,19 +279,20 @@ export const VrHud: React.FC = () => {
       drawHUD();
     }
 
-    // Position HUD ahead of player
+    // Position HUD ahead of player in calibrated corridor
     if (meshRef.current) {
-      const headY = vrEngine.calibration.headY;
-      meshRef.current.position.set(0, headY + 0.35, -1.8);
-      // Tilt slightly downward toward player
+      const localHud = new THREE.Vector3(0, vrEngine.calibration.headY + 0.35, -1.8);
+      vrEngine.localToWorld(localHud, meshRef.current.position);
+      meshRef.current.rotation.y = vrEngine.calibration.forwardYaw;
       meshRef.current.rotation.x = 0.12;
     }
 
     // In Game Over state, check if player punches the restart button
     if (vrEngine.state === 'game_over') {
-      const restartCenter = new THREE.Vector3(0, vrEngine.calibration.headY - 0.15, -1.8);
-      const hitLeft = vrEngine.hands.left.active && vrEngine.hands.left.position.distanceTo(restartCenter) < 0.45;
-      const hitRight = vrEngine.hands.right.active && vrEngine.hands.right.position.distanceTo(restartCenter) < 0.45;
+      const restartLocal = new THREE.Vector3(0, vrEngine.calibration.headY - 0.15, -1.8);
+      const restartWorld = vrEngine.localToWorld(restartLocal);
+      const hitLeft = vrEngine.hands.left.active && vrEngine.hands.left.position.distanceTo(restartWorld) < 0.45;
+      const hitRight = vrEngine.hands.right.active && vrEngine.hands.right.position.distanceTo(restartWorld) < 0.45;
       if (hitLeft || hitRight) {
         vrEngine.startSession(vrEngine.mode, vrEngine.difficulty, camera);
       }

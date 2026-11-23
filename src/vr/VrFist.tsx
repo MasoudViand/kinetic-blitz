@@ -70,8 +70,13 @@ export const VrFist: React.FC<VrFistProps> = ({ handedness }) => {
     }
   });
 
+  const resolvedSpace =
+    state?.inputSource?.gripSpace ||
+    state?.inputSource?.targetRaySpace ||
+    'target-ray-space';
+
   return (
-    <XRSpace space="grip-space">
+    <XRSpace space={resolvedSpace}>
       <group ref={groupRef}>
         {/* Core Knuckle Orb */}
         <mesh position={[0, 0, 0]}>

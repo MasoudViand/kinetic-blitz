@@ -8,6 +8,7 @@ import { VrTargets } from './VrTargets';
 import { VrParticles } from './VrParticles';
 import { VrTether } from './VrTether';
 import { VrGrid } from './VrGrid';
+import { VrCorridorAnchor } from './VrCorridorAnchor';
 import { VrHud } from './VrHud';
 import { GameMode, DifficultyLevel } from '../types/game';
 
@@ -73,6 +74,7 @@ export const VrScene: React.FC<VrSceneProps> = ({ mode, difficulty, onExitSessio
       >
         <XR store={xrStore}>
           <VrGameLoop mode={mode} difficulty={difficulty} onExitSession={onExitSession} />
+          <VrCorridorAnchor />
           <VrGrid />
           <VrTargets />
           <VrTether />

@@ -63,7 +63,7 @@ export const VrTether: React.FC = () => {
     glowLine.visible = true;
 
     const start = hand.position;
-    const end = activeVolt.currentPos;
+    const end = activeVolt.worldPos;
     const posArr = positions.current;
 
     for (let i = 0; i < pointsCount; i++) {

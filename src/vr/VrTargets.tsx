@@ -1,20 +1,79 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { vrEngine } from './vrEngine';
 import { VrBlitzOrb, VrVoltNode, VrLaserBarrier } from './vrTypes';
 
 export const VrTargets: React.FC = () => {
-  // Trigger R3F re-renders each frame cleanly without React state overhead
-  const [, setFrameCount] = React.useState(0);
+  // Store refs to 3D groups for imperative 90 FPS transform updates
+  const orbGroups = useRef<Map<string, THREE.Group>>(new Map());
+  const voltGroups = useRef<Map<string, THREE.Group>>(new Map());
+  const laserGroups = useRef<Map<string, THREE.Group>>(new Map());
+
+  // Store refs to visual sub-elements (targeting rings, charge auras)
+  const orbTargetRings = useRef<Map<string, THREE.Mesh>>(new Map());
+  const voltChargeAuras = useRef<Map<string, THREE.Mesh>>(new Map());
+
+  // React state ONLY re-renders when targets are added or removed
+  const [, setListVersion] = useState(0);
+
+  useEffect(() => {
+    vrEngine.onTargetsListChanged = () => {
+      setListVersion((v) => v + 1);
+    };
+    return () => {
+      vrEngine.onTargetsListChanged = undefined;
+    };
+  }, []);
+
+  // Imperative per-frame update loop (Zero React re-renders)
   useFrame(() => {
-    // Only force re-render when targets exist
-    if (
-      vrEngine.blitzOrbs.length > 0 ||
-      vrEngine.voltNodes.length > 0 ||
-      vrEngine.laserBarriers.length > 0
-    ) {
-      setFrameCount((c) => (c + 1) % 1000000);
+    // 1. Update Blitz Orbs
+    for (let i = 0; i < vrEngine.blitzOrbs.length; i++) {
+      const orb = vrEngine.blitzOrbs[i];
+      const group = orbGroups.current.get(orb.id);
+      if (group) {
+        group.position.copy(orb.worldPos);
+
+        // Punch-Ready Visual Cue: Show crisp targeting ring when in arm's reach
+        const ring = orbTargetRings.current.get(orb.id);
+        if (ring) {
+          ring.visible = orb.inStrikeZone;
+          if (orb.inStrikeZone) {
+            // Subtle rotation animation for the targeting reticle
+            ring.rotation.z += 0.05;
+          }
+        }
+      }
+    }
+
+    // 2. Update Volt Nodes
+    for (let i = 0; i < vrEngine.voltNodes.length; i++) {
+      const node = vrEngine.voltNodes[i];
+      const group = voltGroups.current.get(node.id);
+      if (group) {
+        group.position.copy(node.worldPos);
+
+        // Update charge aura scale based on hold progress
+        const aura = voltChargeAuras.current.get(node.id);
+        if (aura) {
+          aura.visible = node.isHeld;
+          if (node.isHeld) {
+            const chargeScale = 0.5 + node.holdProgress * 0.9;
+            aura.scale.set(chargeScale, chargeScale, chargeScale);
+          }
+        }
+      }
+    }
+
+    // 3. Update Laser Barriers
+    for (let i = 0; i < vrEngine.laserBarriers.length; i++) {
+      const laser = vrEngine.laserBarriers[i];
+      const group = laserGroups.current.get(laser.id);
+      if (group) {
+        group.position.copy(laser.worldPos);
+        group.rotation.y = laser.worldRotationY;
+      }
     }
   });
 
@@ -22,53 +81,106 @@ export const VrTargets: React.FC = () => {
     <group>
       {/* 1. Blitz Orbs */}
       {vrEngine.blitzOrbs.map((orb) => (
-        <BlitzOrbMesh key={orb.id} orb={orb} />
+        <group
+          key={orb.id}
+          ref={(el) => {
+            if (el) {
+              orbGroups.current.set(orb.id, el);
+              el.position.copy(orb.worldPos);
+            } else {
+              orbGroups.current.delete(orb.id);
+              orbTargetRings.current.delete(orb.id);
+            }
+          }}
+        >
+          <BlitzOrbMesh
+            orb={orb}
+            setRingRef={(ringEl) => {
+              if (ringEl) {
+                orbTargetRings.current.set(orb.id, ringEl);
+              } else {
+                orbTargetRings.current.delete(orb.id);
+              }
+            }}
+          />
+        </group>
       ))}
 
       {/* 2. Volt Nodes */}
       {vrEngine.voltNodes.map((node) => (
-        <VoltNodeMesh key={node.id} node={node} />
+        <group
+          key={node.id}
+          ref={(el) => {
+            if (el) {
+              voltGroups.current.set(node.id, el);
+              el.position.copy(node.worldPos);
+            } else {
+              voltGroups.current.delete(node.id);
+              voltChargeAuras.current.delete(node.id);
+            }
+          }}
+        >
+          <VoltNodeMesh
+            node={node}
+            setAuraRef={(auraEl) => {
+              if (auraEl) {
+                voltChargeAuras.current.set(node.id, auraEl);
+              } else {
+                voltChargeAuras.current.delete(node.id);
+              }
+            }}
+          />
+        </group>
       ))}
 
       {/* 3. Laser Barriers */}
       {vrEngine.laserBarriers.map((laser) => (
-        <LaserBarrierMesh key={laser.id} laser={laser} />
+        <group
+          key={laser.id}
+          ref={(el) => {
+            if (el) {
+              laserGroups.current.set(laser.id, el);
+              el.position.copy(laser.worldPos);
+              el.rotation.y = laser.worldRotationY;
+            } else {
+              laserGroups.current.delete(laser.id);
+            }
+          }}
+        >
+          <LaserBarrierMesh laser={laser} />
+        </group>
       ))}
     </group>
   );
 };
 
-// Blitz Orb Component
-const BlitzOrbMesh: React.FC<{ orb: VrBlitzOrb }> = ({ orb }) => {
-  const isTelegraph = orb.elapsed < orb.telegraphTime;
+// Blitz Orb Visuals
+const BlitzOrbMesh: React.FC<{
+  orb: VrBlitzOrb;
+  setRingRef: (el: THREE.Mesh | null) => void;
+}> = ({ orb, setRingRef }) => {
   const isCyan = orb.color === 'cyan';
   const colorHex = isCyan ? '#00f0ff' : '#ff0077';
   const glowHex = isCyan ? '#00bfff' : '#ff1493';
 
-  // Telegraph ring scale shrinks toward orb as 650ms elapses
-  const telegraphProgress = Math.min(1.0, orb.elapsed / orb.telegraphTime);
-  const ringScale = isTelegraph ? 2.2 - telegraphProgress * 1.2 : 1.0;
-
   return (
-    <group position={orb.currentPos}>
-      {/* 650ms 3D Entry Ring Telegraph */}
-      {isTelegraph && (
-        <mesh scale={[ringScale, ringScale, ringScale]}>
-          <ringGeometry args={[orb.radius * 1.2, orb.radius * 1.35, 32]} />
-          <meshBasicMaterial
-            color={colorHex}
-            transparent
-            opacity={0.85 * (1 - telegraphProgress * 0.3)}
-            blending={THREE.AdditiveBlending}
-            side={THREE.DoubleSide}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
+    <group>
+      {/* Punch-Ready Subtle Targeting Ring (Shown when localZ >= -0.80m) */}
+      <mesh ref={setRingRef} visible={false}>
+        <ringGeometry args={[orb.radius * 1.35, orb.radius * 1.50, 32]} />
+        <meshBasicMaterial
+          color="#ffffff"
+          transparent
+          opacity={0.95}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
 
-      {/* Solid Inner Core */}
+      {/* White Hot Solid Core */}
       <mesh>
-        <sphereGeometry args={[orb.radius * 0.75, 16, 16]} />
+        <sphereGeometry args={[orb.radius * 0.72, 16, 16]} />
         <meshBasicMaterial color="#ffffff" />
       </mesh>
 
@@ -78,25 +190,25 @@ const BlitzOrbMesh: React.FC<{ orb: VrBlitzOrb }> = ({ orb }) => {
         <meshBasicMaterial color={colorHex} />
       </mesh>
 
-      {/* Nested Additive Glow Shell 1 */}
+      {/* Outer Additive Glow Shell 1 */}
       <mesh>
-        <sphereGeometry args={[orb.radius * 1.28, 16, 16]} />
+        <sphereGeometry args={[orb.radius * 1.32, 16, 16]} />
         <meshBasicMaterial
           color={glowHex}
           transparent
-          opacity={orb.inStrikeZone ? 0.65 : 0.45}
+          opacity={0.5}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </mesh>
 
-      {/* Nested Additive Glow Shell 2 */}
+      {/* Outer Additive Glow Shell 2 */}
       <mesh>
-        <sphereGeometry args={[orb.radius * 1.55, 12, 12]} />
+        <sphereGeometry args={[orb.radius * 1.62, 12, 12]} />
         <meshBasicMaterial
           color={colorHex}
           transparent
-          opacity={0.2}
+          opacity={0.22}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
@@ -105,31 +217,13 @@ const BlitzOrbMesh: React.FC<{ orb: VrBlitzOrb }> = ({ orb }) => {
   );
 };
 
-// Volt Node Component
-const VoltNodeMesh: React.FC<{ node: VrVoltNode }> = ({ node }) => {
-  const isTelegraph = node.elapsed < node.telegraphTime;
-  const telegraphProgress = Math.min(1.0, node.elapsed / node.telegraphTime);
-  const ringScale = isTelegraph ? 2.2 - telegraphProgress * 1.2 : 1.0;
-
-  const chargeScale = 0.3 + node.holdProgress * 0.85;
-
+// Volt Node Visuals
+const VoltNodeMesh: React.FC<{
+  node: VrVoltNode;
+  setAuraRef: (el: THREE.Mesh | null) => void;
+}> = ({ node, setAuraRef }) => {
   return (
-    <group position={node.currentPos}>
-      {/* Entry Ring Telegraph */}
-      {isTelegraph && (
-        <mesh scale={[ringScale, ringScale, ringScale]}>
-          <ringGeometry args={[node.radius * 1.25, node.radius * 1.4, 32]} />
-          <meshBasicMaterial
-            color="#ffd700"
-            transparent
-            opacity={0.85 * (1 - telegraphProgress * 0.3)}
-            blending={THREE.AdditiveBlending}
-            side={THREE.DoubleSide}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
-
+    <group>
       {/* White Hot Core */}
       <mesh>
         <sphereGeometry args={[node.radius * 0.65, 16, 16]} />
@@ -148,37 +242,34 @@ const VoltNodeMesh: React.FC<{ node: VrVoltNode }> = ({ node }) => {
         <meshBasicMaterial
           color="#ffd700"
           transparent
-          opacity={node.isHeld ? 0.75 : 0.45}
+          opacity={0.5}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </mesh>
 
       {/* Expanding Charge Aura While Held */}
-      {node.isHeld && (
-        <mesh scale={[chargeScale, chargeScale, chargeScale]}>
-          <sphereGeometry args={[node.radius * 1.7, 14, 14]} />
-          <meshBasicMaterial
-            color="#00f0ff"
-            transparent
-            opacity={0.45}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
+      <mesh ref={setAuraRef} visible={false}>
+        <sphereGeometry args={[node.radius * 1.7, 14, 14]} />
+        <meshBasicMaterial
+          color="#00f0ff"
+          transparent
+          opacity={0.45}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
     </group>
   );
 };
 
-// Laser Barrier Component
+// Laser Barrier Visuals
 const LaserBarrierMesh: React.FC<{ laser: VrLaserBarrier }> = ({ laser }) => {
   const isSquat = laser.orientation === 'horizontal_squat';
 
   if (isSquat) {
-    // Horizontal overhead bar (Duck/Squat)
     return (
-      <group position={[0, laser.barY, laser.currentZ]}>
+      <group>
         {/* Core Dangerous Red Beam */}
         <mesh>
           <boxGeometry args={[laser.width, laser.height, 0.12]} />
@@ -202,7 +293,7 @@ const LaserBarrierMesh: React.FC<{ laser: VrLaserBarrier }> = ({ laser }) => {
 
   // Vertical Side Beam (Lean Left / Right)
   return (
-    <group position={[laser.beamX, 1.4, laser.currentZ]}>
+    <group>
       {/* Core Beam */}
       <mesh>
         <boxGeometry args={[laser.width, laser.height, 0.12]} />

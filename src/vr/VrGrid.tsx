@@ -1,11 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { useThree } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber';
 import { useXR } from '@react-three/xr';
+import { vrEngine } from './vrEngine';
 
 export const VrGrid: React.FC = () => {
   const mode = useXR((xr) => xr.mode);
   const { scene } = useThree();
+  const groupRef = useRef<THREE.Group>(null);
 
   const isVR = mode === 'immersive-vr';
 
@@ -20,10 +22,17 @@ export const VrGrid: React.FC = () => {
     };
   }, [isVR, scene]);
 
+  useFrame(() => {
+    if (groupRef.current && isVR) {
+      groupRef.current.position.copy(vrEngine.calibration.playerOrigin);
+      groupRef.current.rotation.y = vrEngine.calibration.forwardYaw;
+    }
+  });
+
   if (!isVR) return null;
 
   return (
-    <group position={[0, 0, 0]}>
+    <group ref={groupRef} position={[0, 0, 0]}>
       {/* Primary Cyber Grid Floor */}
       <gridHelper
         args={[24, 24, '#00f0ff', '#0e2b45']}
