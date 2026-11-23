@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { vrEngine } from './vrEngine';
-import { VrBlitzOrb, VrVoltNode, VrLaserBarrier } from './vrTypes';
+import { VrBlitzOrb, VrVoltNode, VrLaserBarrier, VR_COLORS } from './vrTypes';
 
 export const VrTargets: React.FC = () => {
   // Store refs to 3D groups for imperative 90 FPS transform updates
@@ -162,8 +162,8 @@ const BlitzOrbMesh: React.FC<{
   setRingRef: (el: THREE.Mesh | null) => void;
 }> = ({ orb, setRingRef }) => {
   const isCyan = orb.color === 'cyan';
-  const colorHex = isCyan ? '#00f0ff' : '#ff0077';
-  const glowHex = isCyan ? '#00bfff' : '#ff1493';
+  const colorHex = isCyan ? VR_COLORS.leftCyan : VR_COLORS.rightMagenta;
+  const glowHex = isCyan ? VR_COLORS.leftGlow : VR_COLORS.rightGlow;
 
   return (
     <group>
@@ -242,7 +242,7 @@ const VoltNodeMesh: React.FC<{
       <mesh>
         <sphereGeometry args={[node.radius * 1.35, 16, 16]} />
         <meshBasicMaterial
-          color="#ffd700"
+          color={VR_COLORS.goldNode}
           transparent
           opacity={0.5}
           blending={THREE.AdditiveBlending}

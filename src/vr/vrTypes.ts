@@ -4,6 +4,16 @@ export type VrPhase = 'CALIBRATING' | 'PLAYING' | 'PAUSED' | 'SUMMARY';
 export type VrGameState = 'idle' | 'calibrating' | 'countdown' | 'playing' | 'paused' | 'game_over' | 'summary';
 export type VrOrbTier = 'low' | 'mid' | 'high';
 
+export const VR_COLORS = {
+  leftCyan: '#00f0ff',       // Left Fist & Left Orb: Electric Cyan
+  leftGlow: '#00bfff',       // Left Fist & Left Orb Outer Glow: Deep Sky Blue
+  rightMagenta: '#ff0077',   // Right Fist & Right Orb: Neon Magenta
+  rightGlow: '#ff1493',      // Right Fist & Right Orb Outer Glow: Deep Pink
+  goldNode: '#ffd700',       // Neutral Volt Node: Radiant Gold
+  errorRed: '#ef4444',       // Wrong-Hand Shatter Sparks: Crimson
+  errorMuted: '#8b0000',     // Wrong-Hand Core
+} as const;
+
 export interface VrHandInfo {
   handedness: 'left' | 'right';
   position: THREE.Vector3;
@@ -19,6 +29,7 @@ export interface VrBlitzOrb {
   id: string;
   kind: 'blitz_orb';
   color: 'cyan' | 'magenta';
+  requiredHand: 'left' | 'right'; // Strict hand ownership
   tier: VrOrbTier;
   localPos: THREE.Vector3;
   worldPos: THREE.Vector3;
@@ -39,6 +50,7 @@ export interface VrBlitzOrb {
 export interface VrVoltNode {
   id: string;
   kind: 'volt_node';
+  requiredHand: 'any';       // Neutral: either hand can grab and hold
   localPos: THREE.Vector3;
   worldPos: THREE.Vector3;
   spawnLocal: THREE.Vector3;

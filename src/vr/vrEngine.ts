@@ -5,6 +5,7 @@ import {
   VrPhase,
   VrGameState,
   VrOrbTier,
+  VR_COLORS,
   VrHandInfo,
   VrBlitzOrb,
   VrVoltNode,
@@ -101,6 +102,7 @@ export class VrEngine {
   private nextLaserSpawnTime: number = 6000;
   private orbCounter: number = 0;
   private recentOrbTiers: VrOrbTier[] = [];
+  private recentOrbHands: ('left' | 'right')[] = [];
 
   // Particle pool for zero-GC hit explosions
   public static readonly MAX_PARTICLES = 160;
@@ -216,6 +218,7 @@ export class VrEngine {
     this.voltNodes = [];
     this.laserBarriers = [];
     this.recentOrbTiers = [];
+    this.recentOrbHands = [];
     this.onTargetsListChanged?.();
 
     const durationMap: Record<GameMode, number> = {
@@ -404,9 +407,45 @@ export class VrEngine {
     }
     targetY = Math.max(0.65, targetY);
 
+    // 2. Strict Hand Ownership & Anti-Streak Hand Balancing
+    let requiredHand: 'left' | 'right';
+    if (
+      this.recentOrbHands.length >= 2 &&
+      this.recentOrbHands[0] === this.recentOrbHands[1]
+    ) {
+      // Force opposite hand if last 2 orbs were the same hand
+      requiredHand = this.recentOrbHands[0] === 'left' ? 'right' : 'left';
+    } else {
+      requiredHand = Math.random() < 0.5 ? 'left' : 'right';
+    }
+    this.recentOrbHands.push(requiredHand);
+    if (this.recentOrbHands.length > 2) {
+      this.recentOrbHands.shift();
+    }
+
+    // Color strictly matches required hand (Left = Electric Cyan, Right = Neon Magenta)
+    const color: 'cyan' | 'magenta' = requiredHand === 'left' ? 'cyan' : 'magenta';
+    this.orbCounter++;
+
+    // 3. Ergonomic Side-Biasing (Avoid controller clashing in mid-air):
+    // Left (Cyan): bias ~80% to [-0.38m, +0.06m] and ~20% cross-body [+0.06m, +0.24m]
+    // Right (Magenta): bias ~80% to [-0.06m, +0.38m] and ~20% cross-body [-0.24m, -0.06m]
+    let targetX: number;
+    if (requiredHand === 'left') {
+      targetX =
+        Math.random() < 0.80
+          ? THREE.MathUtils.randFloat(-0.38, 0.06)
+          : THREE.MathUtils.randFloat(0.06, 0.24);
+    } else {
+      targetX =
+        Math.random() < 0.80
+          ? THREE.MathUtils.randFloat(-0.06, 0.38)
+          : THREE.MathUtils.randFloat(-0.24, -0.06);
+    }
+
     // Reachable punch target in front of player
     const targetLocal = new THREE.Vector3(
-      THREE.MathUtils.randFloat(-0.38, 0.38),
+      targetX,
       targetY,
       -0.45 // Comfortable arm-reach punch distance
     );
@@ -445,15 +484,13 @@ export class VrEngine {
     const approachDuration = durationMap[this.difficulty];
     const totalDuration = approachDuration / tHit;
 
-    const color: 'cyan' | 'magenta' = this.orbCounter % 2 === 0 ? 'cyan' : 'magenta';
-    this.orbCounter++;
-
     const initialWorld = this.localToWorld(spawnLocal);
 
     this.blitzOrbs.push({
       id: `vr-orb-${Date.now()}-${Math.random()}`,
       kind: 'blitz_orb',
       color,
+      requiredHand,
       tier: chosenTier,
       localPos: spawnLocal.clone(),
       worldPos: initialWorld,
@@ -476,6 +513,7 @@ export class VrEngine {
 
   /**
    * Spawn incoming Volt Node along a chest-height diagonal lane.
+   * Neutral hand ownership (either hand can grab and hold).
    * Continues smoothly through arm reach past the player (never stopping at eye level).
    */
   private spawnVoltNode() {
@@ -522,6 +560,7 @@ export class VrEngine {
     this.voltNodes.push({
       id: `vr-volt-${Date.now()}-${Math.random()}`,
       kind: 'volt_node',
+      requiredHand: 'any',
       localPos: spawnLocal.clone(),
       worldPos: initialWorld,
       spawnLocal,
@@ -722,60 +761,87 @@ export class VrEngine {
       const inReach = orb.localPos.z >= -0.80 && orb.localPos.z <= 0.10;
       orb.inStrikeZone = inReach;
 
-      // Fist collision check
+      // Fist collision check with strict hand-to-color matching
       // Effective strike threshold: orb radius (0.12) + fist collider (0.09) * 1.25x = 0.2625m
       const strikeRadius = (orb.radius + 0.09) * 1.25;
-      let hitByHand: VrHandInfo | null = null;
 
       if (inReach) {
-        if (this.hands.left.active && this.hands.left.position.distanceTo(orb.worldPos) <= strikeRadius) {
-          hitByHand = this.hands.left;
-        } else if (this.hands.right.active && this.hands.right.position.distanceTo(orb.worldPos) <= strikeRadius) {
-          hitByHand = this.hands.right;
+        const matchingHand = this.hands[orb.requiredHand];
+        const wrongHand = this.hands[orb.requiredHand === 'left' ? 'right' : 'left'];
+
+        // 1. Priority check: Matching fist hits
+        const matchingHit =
+          matchingHand.active &&
+          matchingHand.position.distanceTo(orb.worldPos) <= strikeRadius;
+
+        if (matchingHit) {
+          orb.isHit = true;
+          this.stats.totalStrikesAttempted++;
+          this.stats.pulseHits++;
+
+          const punchSpeed = matchingHand.velocity.length();
+          const isPower = punchSpeed >= 2.0;
+          if (isPower) {
+            this.stats.powerHits++;
+          }
+
+          this.stats.combo++;
+          if (this.stats.combo > this.stats.maxCombo) {
+            this.stats.maxCombo = this.stats.combo;
+          }
+
+          let points = isPower ? 250 : 100;
+          points *= Math.min(this.stats.combo, 10);
+          this.stats.score += points;
+
+          this.stats.overdrive = Math.min(100, this.stats.overdrive + (isPower ? 8 : 4));
+          if (this.stats.overdrive >= 100) {
+            this.stats.isOverdrive = true;
+          }
+
+          const hapticIntensity = isPower ? 0.95 : 0.55;
+          const hapticDuration = isPower ? 110 : 60;
+          this.pulseHaptic(matchingHand.handedness, hapticIntensity, hapticDuration);
+          soundEngine.playPunch(isPower, this.stats.combo);
+
+          this.emitHitSparks(
+            orb.worldPos,
+            orb.color === 'cyan' ? VR_COLORS.leftCyan : VR_COLORS.rightMagenta,
+            isPower ? 26 : 16,
+            isPower
+          );
+
+          this.blitzOrbs.splice(i, 1);
+          targetsListChanged = true;
+          this.onHudDirty?.();
+          continue;
         }
-      }
 
-      if (hitByHand) {
-        orb.isHit = true;
-        this.stats.totalStrikesAttempted++;
-        this.stats.pulseHits++;
+        // 2. Reject check: Opposite (wrong) fist hits
+        const wrongHit =
+          wrongHand.active &&
+          wrongHand.position.distanceTo(orb.worldPos) <= strikeRadius;
 
-        const punchSpeed = hitByHand.velocity.length();
-        const isPower = punchSpeed >= 2.0;
-        if (isPower) {
-          this.stats.powerHits++;
+        if (wrongHit) {
+          // Reject hit: 0 points, reset combo
+          this.stats.combo = 0;
+          this.stats.totalStrikesAttempted++;
+
+          // Double-pulse / dull haptic buzz (0.45 intensity, 90ms duration) on wrong controller
+          this.pulseHaptic(wrongHand.handedness, 0.45, 90);
+
+          // Distinct low/dull error buzz
+          soundEngine.playWrongHandBuzz();
+
+          // Brief crimson miss spark burst
+          this.emitHitSparks(orb.worldPos, VR_COLORS.errorRed, 14, false);
+
+          // Shatter and remove orb
+          this.blitzOrbs.splice(i, 1);
+          targetsListChanged = true;
+          this.onHudDirty?.();
+          continue;
         }
-
-        this.stats.combo++;
-        if (this.stats.combo > this.stats.maxCombo) {
-          this.stats.maxCombo = this.stats.combo;
-        }
-
-        let points = isPower ? 250 : 100;
-        points *= Math.min(this.stats.combo, 10);
-        this.stats.score += points;
-
-        this.stats.overdrive = Math.min(100, this.stats.overdrive + (isPower ? 8 : 4));
-        if (this.stats.overdrive >= 100) {
-          this.stats.isOverdrive = true;
-        }
-
-        const hapticIntensity = isPower ? 0.95 : 0.55;
-        const hapticDuration = isPower ? 110 : 60;
-        this.pulseHaptic(hitByHand.handedness, hapticIntensity, hapticDuration);
-        soundEngine.playPunch(isPower, this.stats.combo);
-
-        this.emitHitSparks(
-          orb.worldPos,
-          orb.color === 'cyan' ? '#00f0ff' : '#ff0077',
-          isPower ? 26 : 16,
-          isPower
-        );
-
-        this.blitzOrbs.splice(i, 1);
-        targetsListChanged = true;
-        this.onHudDirty?.();
-        continue;
       }
 
       // Miss check: passed behind player shoulders

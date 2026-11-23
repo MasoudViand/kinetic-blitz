@@ -281,6 +281,40 @@ class SoundEngine {
     osc.start(now);
     osc.stop(now + 0.06);
   }
+
+  public playWrongHandBuzz() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+
+    // Low, raspy error buzz using two detuned sawtooth waves
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc1.type = 'sawtooth';
+    osc2.type = 'sawtooth';
+
+    osc1.frequency.setValueAtTime(120, now);
+    osc1.frequency.exponentialRampToValueAtTime(75, now + 0.16);
+
+    osc2.frequency.setValueAtTime(126, now); // Detune for raspy discordance
+    osc2.frequency.exponentialRampToValueAtTime(80, now + 0.16);
+
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    this.connectOutput(gain);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.19);
+    osc2.stop(now + 0.19);
+  }
 }
 
 export const soundEngine = new SoundEngine();

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useXRInputSourceStateContext, XRSpace } from '@react-three/xr';
 import { vrEngine } from './vrEngine';
+import { VR_COLORS } from './vrTypes';
 import { VrLaserRay } from './VrLaserPointer';
 
 interface VrFistProps {
@@ -23,8 +24,10 @@ export const VrFist: React.FC<VrFistProps> = ({ handedness }) => {
 
   const state = useXRInputSourceStateContext('controller');
 
+  // Exact color matching: Left Fist = Electric Cyan, Right Fist = Neon Magenta
   const isLeft = handedness === 'left';
-  const colorHex = isLeft ? '#00f0ff' : '#ff0077';
+  const colorHex = isLeft ? VR_COLORS.leftCyan : VR_COLORS.rightMagenta;
+  const glowHex = isLeft ? VR_COLORS.leftGlow : VR_COLORS.rightGlow;
 
   const tempWorldPos = useRef(new THREE.Vector3());
 
@@ -78,7 +81,7 @@ export const VrFist: React.FC<VrFistProps> = ({ handedness }) => {
           <mesh position={[0, 0, 0]}>
             <sphereGeometry args={[0.065, 16, 16]} />
             <meshBasicMaterial
-              color={colorHex}
+              color={glowHex}
               transparent
               opacity={0.35}
               blending={THREE.AdditiveBlending}

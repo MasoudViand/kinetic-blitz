@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useXRInputSourceStateContext, XRSpace } from '@react-three/xr';
 import { vrEngine } from './vrEngine';
+import { VR_COLORS } from './vrTypes';
 
 interface VrHandFistProps {
   handedness: 'left' | 'right';
@@ -12,8 +13,9 @@ export const VrHandFist: React.FC<VrHandFistProps> = ({ handedness }) => {
   const groupRef = useRef<THREE.Group>(null);
   const state = useXRInputSourceStateContext('hand');
 
+  // Exact color matching: Left Hand = Electric Cyan, Right Hand = Neon Magenta
   const isLeft = handedness === 'left';
-  const colorHex = isLeft ? '#00f0ff' : '#ff0077';
+  const colorHex = isLeft ? VR_COLORS.leftCyan : VR_COLORS.rightMagenta;
   const tempWorldPos = useRef(new THREE.Vector3());
 
   useFrame((_, delta) => {
